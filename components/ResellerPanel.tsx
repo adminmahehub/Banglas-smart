@@ -64,9 +64,10 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [modal, setModal] = useState(false);
   const [slip, setSlip] = useState<OpenVpnAccount | null>(null);
   const [resellers, setResellers] = useState<any[]>([]);
-  const [form, setForm] = useState({ phone: '', months: 1 });
+  const [form, setForm] = useState({ phone: '', months: 1, bw: 'Unlimited' });
   const [renewFor, setRenewFor] = useState<OpenVpnAccount | null>(null);
   const [renewMonths, setRenewMonths] = useState(1);
+  const [renewGb, setRenewGb] = useState(0);
   const [coupon, setCoupon] = useState('');
   const [couponPct, setCouponPct] = useState(0);
   const [coupons, setCoupons] = useState<any[]>([]);
@@ -120,15 +121,15 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   }
   async function create() {
     setErr('');
-    const { data, error } = await supabase.rpc('create_customer', { p_phone: form.phone, p_months: form.months });
+    const { data, error } = await supabase.rpc('create_customer', { p_phone: form.phone, p_months: form.months, p_bw: form.bw });
     if (error) return setErr(error.message);
-    await load(); setModal(false); setSlip(toAcc(data)); setForm({ phone: '', months: 1 });
+    await load(); setModal(false); setSlip(toAcc(data)); setForm({ phone: '', months: 1, bw: 'Unlimited' });
   }
   async function renew() {
     if (!renewFor) return;
-    const { error } = await supabase.rpc('renew_customer', { p_username: renewFor.username, p_months: renewMonths });
+    const { error } = await supabase.rpc('renew_customer', { p_username: renewFor.username, p_months: renewMonths, p_add_gb: renewGb });
     if (error) { alert(error.message); return; }
-    alert(`Renewed for ${renewMonths} month(s).`); setRenewFor(null); setRenewMonths(1); load();
+    alert('Renewed successfully.'); setRenewFor(null); setRenewMonths(1); setRenewGb(0); load();
   }
   async function checkCoupon() {
     setCouponPct(0);
@@ -222,18 +223,19 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     <div className={`${card} overflow-hidden`}>
       <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
         <thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">
-          {['Phone number', 'Start date', 'Expire date', 'Status', ...(compact ? [] : ['Actions'])].map((h) => <th key={h} className="px-4 py-3 font-bold">{h}</th>)}
+          {['Phone number', 'Bandwidth', 'Start date', 'Expire date', 'Status', ...(compact ? [] : ['Actions'])].map((h) => <th key={h} className="px-4 py-3 font-bold">{h}</th>)}
         </tr></thead>
         <tbody>{rows.map((a) => (
           <tr key={a.id} className="border-t border-[var(--line)] text-[var(--ink)]">
             <td className="px-4 py-3"><div className="font-bold">{a.username}</div></td>
+            <td className="px-4 py-3 text-xs font-semibold"><div className="h-1.5 w-24 rounded-full bg-[var(--line)] overflow-hidden mb-1"><div className="h-full rounded-full bg-violet-500" style={{ width: a.bandwidthType === 'Unlimited' ? '8%' : `${Math.min(100, (a.usedMb / (a.bandwidthGb * 1024)) * 100)}%` }} /></div>{(a.usedMb / 1024).toFixed(1)} GB / {a.bandwidthType === 'Unlimited' ? 'Unlimited' : `${a.bandwidthGb} GB`}</td>
             <td className="px-4 py-3 text-xs font-semibold">{a.startDate ? new Date(a.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</td>
             <td className="px-4 py-3 text-xs font-semibold">{a.expiryDate}</td>
             <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${a.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : a.status === 'suspended' ? 'bg-amber-500/15 text-amber-600' : 'bg-rose-500/15 text-rose-500'}`}>{a.status}</span></td>
             {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
               <button title="Import link / slip" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Copy className="h-4 w-4" /></button>
               <button title="Download .ovpn" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
-              <button title="Renew (choose months)" onClick={() => { setRenewFor(a); setRenewMonths(1); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
+              <button title="Renew (choose months)" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
               <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
               <button title="Delete" onClick={() => del(a)} className={`${ghost} !p-2 text-rose-500`}><Trash2 className="h-4 w-4" /></button></div></td>}
           </tr>))}
@@ -366,6 +368,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             <div className="space-y-3">
               <input className={inp} inputMode="tel" placeholder="Customer phone / WhatsApp number with country code" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               <select className={inp} value={form.months} onChange={(e) => setForm({ ...form, months: Number(e.target.value) })}>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''}</option>)}</select>
+              <select className={inp} value={form.bw} onChange={(e) => setForm({ ...form, bw: e.target.value })}>{['Unlimited', '10', '30', '50', '100', '200', '500'].map((b) => <option key={b} value={b}>{b === 'Unlimited' ? 'Unlimited bandwidth' : `${b} GB bandwidth`}</option>)}</select>
               <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">{isAdmin ? 'Admin account: no credits are used' : 'Credits used (1 credit = 1 month)'}</span><b className="text-lg">{isAdmin ? 0 : form.months}</b></div>
               <div className="text-xs text-[var(--mut)]">One account per phone number. The same number cannot be added twice.</div>
               {err && <div className="text-sm font-semibold text-rose-500">{err}</div>}
@@ -380,7 +383,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           <div className={`${card} w-full max-w-sm p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
             <div className="flex items-center justify-between mb-3"><h3 className="text-lg font-black">Renew {renewFor.username}</h3><button onClick={() => setRenewFor(null)}><X className="h-5 w-5" /></button></div>
             <div className="text-xs text-[var(--mut)] mb-3">Start: {renewFor.startDate || '-'} · Expires: {renewFor.expiryDate}</div>
-            <select className={`${inp} mb-3`} value={renewMonths} onChange={(e) => setRenewMonths(Number(e.target.value))}>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''}</option>)}</select>
+            <select className={`${inp} mb-3`} value={renewMonths} onChange={(e) => setRenewMonths(Number(e.target.value))}>{[0, 1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m === 0 ? 'No extra months' : `${m} month${m > 1 ? 's' : ''}`}</option>)}</select>
+            {renewFor.bandwidthType === 'Limited' && <select className={`${inp} mb-3`} value={renewGb} onChange={(e) => setRenewGb(Number(e.target.value))}>{[0, 10, 30, 50, 100, 200, 500].map((g) => <option key={g} value={g}>{g === 0 ? 'No extra bandwidth' : `Add ${g} GB`}</option>)}</select>}
             <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm mb-4"><span className="text-[var(--mut)]">{isAdmin ? 'Admin: no credits used' : 'Credits deducted'}</span><b className="text-lg">{isAdmin ? 0 : renewMonths}</b></div>
             <button className={`${primary} w-full`} onClick={renew}>Renew</button>
           </div>
