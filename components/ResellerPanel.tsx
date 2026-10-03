@@ -23,6 +23,7 @@ const PRICE: Record<string, Record<string, number>> = {
   Normal: { '10': 40, '30': 60, '200': 140, Unlimited: 180 },
   VIP: { '10': 70, '30': 120, '200': 300, Unlimited: 240 },
 };
+const PER_CREDIT = 200; // 10 credits = ৳2000
 const HOST = { Normal: 'my.ovpn.ovh', VIP: 'vip.ovpn.ovh' } as const;
 const card = 'rounded-2xl bg-[var(--card)] border border-[var(--line)] shadow-[0_8px_30px_rgba(60,72,140,0.07)]';
 const inp = 'w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3.5 py-2.5 text-sm text-[var(--ink)] outline-none focus:border-indigo-400';
@@ -56,16 +57,23 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [creditTo, setCreditTo] = useState('');
   const [pName, setPName] = useState('');
   const [pWa, setPWa] = useState('');
-  const balance = Number(prof?.balance_bdt ?? 0);
+  const credits = Number(prof?.credits ?? 0);
   const isAdmin = prof?.role === 'admin';
   const [q, setQ] = useState('');
   const [log, setLog] = useState<{ t: string; m: string }[]>([]);
   const [modal, setModal] = useState(false);
   const [slip, setSlip] = useState<OpenVpnAccount | null>(null);
   const [resellers, setResellers] = useState<any[]>([]);
-  const [form, setForm] = useState({ u: '', p: '', tier: 'Normal', bw: '30', days: 30 });
+  const [form, setForm] = useState({ phone: '', months: 1 });
+  const [renewFor, setRenewFor] = useState<OpenVpnAccount | null>(null);
+  const [renewMonths, setRenewMonths] = useState(1);
+  const [coupon, setCoupon] = useState('');
+  const [couponPct, setCouponPct] = useState(0);
+  const [coupons, setCoupons] = useState<any[]>([]);
+  const [newCode, setNewCode] = useState('');
+  const [newPct, setNewPct] = useState(10);
   const [err, setErr] = useState('');
-  const [topup, setTopup] = useState(1000);
+  const [topup, setTopup] = useState<number>(0);
   const [copied, setCopied] = useState('');
   const toAcc = (r: any): OpenVpnAccount => ({
     id: r.id, username: r.username, password: r.password, server: r.server_tier === 'VIP' ? 'VIP Brilliant' : 'Normal Dhaka',
@@ -86,6 +94,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setProf(me); setPName(me?.name || ''); setPWa(me?.whatsapp || '');
     setResellers(me?.role === 'admin' ? rows.filter((x) => x.role === 'reseller') : []);
     setAccounts((v.data || []).map(toAcc));
+    const cp = await supabase.from('coupons').select('*').order('created_at', { ascending: false });
+    setCoupons(cp.data || []);
     setLog((a.data || []).map((x: any) => ({ t: new Date(x.created_at).toLocaleString(), m: x.message })));
   };
   useEffect(() => {
@@ -95,7 +105,6 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   }, []);
   useEffect(() => { if (user) load(); else { setProf(null); setAccounts([]); } }, [user]);
 
-  const price = Math.round((PRICE[form.tier][form.bw] * form.days) / 30);
   const list = useMemo(() => accounts.filter((a) => a.username.toLowerCase().includes(q.toLowerCase())), [accounts, q]);
   const active = accounts.filter((a) => a.status === 'active').length;
   const flash = (k: string, t: string) => { copy(t); setCopied(k); setTimeout(() => setCopied(''), 1200); };
@@ -110,15 +119,47 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   }
   async function create() {
     setErr('');
-    const { data, error } = await supabase.rpc('create_vpn_account', { p_username: form.u, p_password: form.p, p_tier: form.tier, p_bw: form.bw, p_days: form.days });
+    const { data, error } = await supabase.rpc('create_customer', { p_phone: form.phone, p_months: form.months });
     if (error) return setErr(error.message);
-    await load(); setModal(false); setSlip(toAcc(data)); setForm({ u: '', p: '', tier: 'Normal', bw: '30', days: 30 });
+    await load(); setModal(false); setSlip(toAcc(data)); setForm({ phone: '', months: 1 });
+  }
+  async function renew() {
+    if (!renewFor) return;
+    const { error } = await supabase.rpc('renew_customer', { p_username: renewFor.username, p_months: renewMonths });
+    if (error) { alert(error.message); return; }
+    alert(`Renewed for ${renewMonths} month(s).`); setRenewFor(null); setRenewMonths(1); load();
+  }
+  async function checkCoupon() {
+    setCouponPct(0);
+    if (!coupon.trim()) return;
+    const { data } = await supabase.from('coupons').select('percent,active').ilike('code', coupon.trim()).maybeSingle();
+    if (!data || !data.active) { alert('Invalid or inactive coupon.'); return; }
+    setCouponPct(Number(data.percent));
+  }
+  async function saveCoupon() {
+    const code = newCode.trim().toUpperCase();
+    if (!code || newPct < 1 || newPct > 100) { alert('Enter a code and a percent from 1 to 100.'); return; }
+    const { error } = await supabase.from('coupons').insert({ code, percent: newPct, active: true });
+    if (error) { alert(error.message); return; }
+    setNewCode(''); load();
+  }
+  async function delCoupon(code: string) {
+    if (!confirm(`Delete coupon ${code}?`)) return;
+    await supabase.from('coupons').delete().eq('code', code); load();
   }
   async function setStatus(id: string, status: OpenVpnAccount['status'], username: string) {
-    const { error } = await supabase.from('vpn_accounts').update({ status }).eq('id', id);
-    if (error) { alert(error.message); return; }
+    const { data: upd, error } = await supabase.from('vpn_accounts').update({ status }).eq('id', id).select('id');
+    if (error) { alert('Update failed: ' + error.message); return; }
+    if (!upd || upd.length === 0) { alert('Nothing was changed. The database did not allow this update for your account (permission rule). Send this message to your developer.'); return; }
     // on suspend/expired, also revoke the certificate on the server (the server retries every minute if this fails)
-    if (status !== 'active') await supabase.functions.invoke('vpn-provision', { body: { username, action: 'revoke' } });
+    if (status !== 'active') {
+      const rv = await supabase.functions.invoke('vpn-provision', { body: { username, action: 'revoke' } });
+      if (rv.error) {
+        let detail = rv.error.message;
+        try { const ctx = (rv.error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
+        alert('Status saved, but the server certificate could not be revoked yet (it will retry automatically). Details: ' + detail);
+      }
+    }
     load();
   }
   async function del(a: OpenVpnAccount) {
@@ -129,12 +170,19 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
       try { const ctx = (rv.error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
       alert('Could not revoke the certificate on the server, so the account was not deleted. Details: ' + detail); return;
     }
-    const { error } = await supabase.from('vpn_accounts').delete().eq('id', a.id);
-    if (error) alert(error.message); else load();
+    const { data: gone, error } = await supabase.from('vpn_accounts').delete().eq('id', a.id).select('id');
+    if (error) { alert('Delete failed: ' + error.message); return; }
+    if (!gone || gone.length === 0) { alert('Nothing was deleted. The database did not allow this delete for your account (permission rule). Send this message to your developer.'); return; }
+    load();
   }
   async function addCredit() {
-    const { error } = await supabase.rpc('admin_add_credit', { p_user: creditTo, p_amount: topup, p_note: 'Admin top-up' });
-    if (error) alert(error.message); else { alert('Credit added'); load(); }
+    const n = Math.floor(Number(topup));
+    if (!creditTo) { alert('Select an account first.'); return; }
+    if (!n || n <= 0) { alert('Enter the number of credits (1 credit = 1 month).'); return; }
+    const payable = Math.round(n * PER_CREDIT * (100 - couponPct) / 100);
+    if (!confirm(`Add ${n} credits? Payable: ৳${payable}`)) return;
+    const { error } = await supabase.rpc('admin_add_credits', { p_user: creditTo, p_credits: n, p_coupon: couponPct > 0 ? coupon.trim() : null });
+    if (error) alert(error.message); else { alert(`Added ${n} credits. Payable was ৳${payable}`); setTopup(0); setCoupon(''); setCouponPct(0); load(); }
   }
   async function saveProfile() {
     const { error } = await supabase.from('profiles').update({ name: pName, whatsapp: pWa }).eq('id', user.id);
@@ -173,19 +221,18 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     <div className={`${card} overflow-hidden`}>
       <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
         <thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">
-          {['Username', 'Bandwidth', 'Validity', 'Status', ...(compact ? [] : ['Actions'])].map((h) => <th key={h} className="px-4 py-3 font-bold">{h}</th>)}
+          {['Phone number', 'Start date', 'Expire date', 'Status', ...(compact ? [] : ['Actions'])].map((h) => <th key={h} className="px-4 py-3 font-bold">{h}</th>)}
         </tr></thead>
         <tbody>{rows.map((a) => (
           <tr key={a.id} className="border-t border-[var(--line)] text-[var(--ink)]">
-            <td className="px-4 py-3"><div className="font-bold">{a.username}</div><div className="text-xs text-[var(--mut)]">{a.server} · {a.serverHost}</div></td>
-            <td className="px-4 py-3 w-52"><div className="text-xs mb-1 text-[var(--mut)]">{fmtGb(a)}</div>
-              <div className="h-1.5 rounded-full bg-[var(--soft)]"><div className="h-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-violet-500" style={{ width: `${pct(a)}%` }} /></div></td>
+            <td className="px-4 py-3"><div className="font-bold">{a.username}</div></td>
+            <td className="px-4 py-3 text-xs font-semibold">{a.startDate ? new Date(a.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</td>
             <td className="px-4 py-3 text-xs font-semibold">{a.expiryDate}</td>
             <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${a.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : a.status === 'suspended' ? 'bg-amber-500/15 text-amber-600' : 'bg-rose-500/15 text-rose-500'}`}>{a.status}</span></td>
             {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
               <button title="Import link / slip" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Copy className="h-4 w-4" /></button>
               <button title="Download .ovpn" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
-              <button title="Renew" onClick={() => setStatus(a.id, 'active', a.username)} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
+              <button title="Renew (choose months)" onClick={() => { setRenewFor(a); setRenewMonths(1); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
               <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
               <button title="Delete" onClick={() => del(a)} className={`${ghost} !p-2 text-rose-500`}><Trash2 className="h-4 w-4" /></button></div></td>}
           </tr>))}
@@ -234,7 +281,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           <button className="lg:hidden" onClick={() => setMenu(true)}><Menu className="h-6 w-6" /></button>
           <div className="text-sm text-[var(--mut)] hidden sm:block">MaheHub / <span className="font-bold text-[var(--ink)] capitalize">{tab}</span></div>
           <div className="ml-auto flex items-center gap-2">
-            <div className={`${ghost} !py-1.5 cursor-default`}><Wallet className="h-4 w-4 text-indigo-500" />৳{balance.toFixed(2)}</div>
+            <div className={`${ghost} !py-1.5 cursor-default`}><Wallet className="h-4 w-4 text-indigo-500" />{credits} credits</div>
             <button onClick={() => setDark(!dark)} className={`${ghost} !p-2.5`} title="Theme">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
             <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center text-sm font-black">{(prof?.name || user?.email || '?').charAt(0).toUpperCase()}</div>
           </div>
@@ -254,36 +301,45 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <Stat icon={Users} label="Total Accounts" value={accounts.length} tone="bg-indigo-500" />
               <Stat icon={Check} label="Active" value={active} tone="bg-emerald-500" />
               <Stat icon={Network} label="Total Resellers" value={resellers.length} tone="bg-violet-500" />
-              <Stat icon={Wallet} label="Balance" value={`৳${balance}`} tone="bg-amber-500" />
+              <Stat icon={Wallet} label="Credits" value={credits} tone="bg-amber-500" />
             </div>
             <div className="mt-8"><Head t="Recent Users" s="Latest subscribers"><button onClick={() => setTab('users')} className={ghost}>View all</button></Head><UsersTable rows={accounts.slice(0, 5)} compact /></div>
             <div className={`${card} p-5 mt-6 flex items-center gap-3`}><Server className="h-5 w-5 text-indigo-500" /><div className="text-sm"><b>Servers (Failover Pool)</b> <span className="text-[var(--mut)]">· real servers will be connected here</span></div></div>
           </>)}
 
           {tab === 'users' && (<>
-            <Head t="Users" s="Active subscribers with bandwidth usage"><button onClick={() => setModal(true)} className={primary}><UserPlus className="h-4 w-4" />Add User</button></Head>
-            <div className="relative mb-4"><Search className="absolute left-3.5 top-3 h-4 w-4 text-[var(--mut)]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search users..." className={`${inp} pl-10`} /></div>
+            <Head t="Users" s="Customers by phone number"><button onClick={() => setModal(true)} className={primary}><UserPlus className="h-4 w-4" />Add User</button></Head>
+            <div className="relative mb-4"><Search className="absolute left-3.5 top-3 h-4 w-4 text-[var(--mut)]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search phone number…" className={`${inp} pl-10`} /></div>
             <UsersTable rows={list} />
           </>)}
 
           {tab === 'resellers' && (<>
             <Head t="Resellers" s={isAdmin ? 'Registered reseller accounts' : 'Visible to admin only'} />
-            <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[560px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Balance', 'Joined'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
-              <tbody>{resellers.map((r) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">৳{r.balance_bdt}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td></tr>)}
-                {resellers.length === 0 && <tr><td colSpan={4} className="px-4 py-10 text-center text-[var(--mut)]">No resellers</td></tr>}</tbody></table></div>
+            <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[560px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Credits', 'Joined', ''].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
+              <tbody>{[...(isAdmin && prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)' }] : []), ...resellers].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3">{isAdmin && <button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button>}</td></tr>)}
+                {resellers.length === 0 && <tr><td colSpan={5} className="px-4 py-10 text-center text-[var(--mut)]">No resellers</td></tr>}</tbody></table></div>
           </>)}
 
           {tab === 'credit' && (<>
             <Head t="Add Credit" s={isAdmin ? 'Add credit to a reseller balance' : 'Credit is added by the admin'} />
-            {!isAdmin ? <div className={`${card} p-6 text-sm`}>Your balance: <b>৳{balance}</b>. To add credit, contact the admin on WhatsApp.</div> : (<>
-              <select className={`${inp} mb-4`} value={creditTo} onChange={(e) => setCreditTo(e.target.value)}><option value="">Select reseller</option>{resellers.map((r) => <option key={r.id} value={r.id}>{r.name} (৳{r.balance_bdt})</option>)}</select>
-              <div className="grid sm:grid-cols-2 gap-4">{[500, 1000, 2000, 5000].map((v) => (
-                <button key={v} onClick={() => setTopup(v)} className={`${card} p-6 text-left transition ${topup === v ? '!border-indigo-500 ring-2 ring-indigo-500/30' : ''}`}>
-                  <div className="text-3xl font-black">৳{v}</div><div className="text-sm text-[var(--mut)] mt-1">Top-up package</div></button>))}</div>
-              <button disabled={!creditTo} className={`${primary} mt-5 disabled:opacity-50`} onClick={addCredit}><Wallet className="h-4 w-4" />Add ৳{topup} Credit</button></>)}
-          </>)}
+            {!isAdmin ? <div className={`${card} p-6 text-sm space-y-2`}><div>Your credits: <b>{credits}</b> (1 credit = 1 month)</div><div className="text-[var(--mut)]">Minimum package: 10 credits (৳2000). To buy credits, contact the admin on WhatsApp.</div></div> : (<>
+              <select className={`${inp} mb-4`} value={creditTo} onChange={(e) => setCreditTo(e.target.value)}><option value="">Select reseller</option>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (my account)' }] : []), ...resellers].map((r: any) => <option key={r.id} value={r.id}>{r.name} ({r.credits ?? 0} credits)</option>)}</select>
+              <label className="text-xs font-bold text-[var(--mut)]">Credits to add (1 credit = 1 month)</label>
+              <input type="number" inputMode="numeric" min={1} placeholder="Type credits, e.g. 10" value={topup || ''} onChange={(e) => setTopup(Number(e.target.value))} className={`${inp} mb-3`} />
+              <div className="flex flex-wrap gap-2 mb-4">{[10, 20, 50, 100].map((v) => (
+                <button key={v} type="button" onClick={() => setTopup(v)} className={`${ghost} !px-3 !py-1.5 text-xs`}>{v}</button>))}</div>
+              <label className="text-xs font-bold text-[var(--mut)]">Coupon code (optional)</label>
+              <div className="flex gap-2 mb-3"><input value={coupon} onChange={(e) => { setCoupon(e.target.value); setCouponPct(0); }} placeholder="Coupon" className={inp} /><button type="button" className={ghost} onClick={checkCoupon}>Apply</button></div>
+              <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">Payable (10 credits = ৳2000){couponPct > 0 ? ` · ${couponPct}% off` : ''}</span><b className="text-lg">৳{Math.round((topup || 0) * PER_CREDIT * (100 - couponPct) / 100)}</b></div>
+              <button disabled={!creditTo || !topup} className={`${primary} mt-5 disabled:opacity-50`} onClick={addCredit}><Wallet className="h-4 w-4" />Add {topup || 0} Credits</button>
+              <div className={`${card} p-5 mt-8`}>
+                <div className="font-black mb-3">Coupons</div>
+                <div className="flex gap-2 mb-3"><input value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder="CODE" className={inp} /><input type="number" min={1} max={100} value={newPct} onChange={(e) => setNewPct(Number(e.target.value))} className={`${inp} !w-24`} /><button type="button" className={primary} onClick={saveCoupon}>Add</button></div>
+                {coupons.length === 0 && <div className="text-sm text-[var(--mut)]">No coupons yet. Percent off is applied when you add credits.</div>}
+                {coupons.map((c) => <div key={c.code} className="flex items-center justify-between border-t border-[var(--line)] py-2 text-sm"><span><b>{c.code}</b> · {c.percent}% off</span><button type="button" className="text-rose-500" onClick={() => delCoupon(c.code)}>Delete</button></div>)}
+              </div></>)}</>)}
 
-          {tab === 'activity' && (<><Head t="Activity" s="Panel ki recent activity" />
+          {tab === 'activity' && (<><Head t="Activity" s="Recent panel activity" />
             <div className={`${card} divide-y divide-[var(--line)]`}>{log.map((l, i) => <div key={i} className="flex gap-4 px-5 py-3.5 text-sm"><span className="w-44 shrink-0 text-xs text-[var(--mut)]">{l.t}</span><span className="font-semibold">{l.m}</span></div>)}</div></>)}
 
           {tab === 'api' && (<><Head t="API" s="Reseller API (design preview)" />
@@ -306,17 +362,25 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           <div className={`${card} w-full max-w-md p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
             <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-black">Add User</h3><button onClick={() => setModal(false)}><X className="h-5 w-5" /></button></div>
             <div className="space-y-3">
-              <input className={inp} placeholder="Username (min 8)" value={form.u} onChange={(e) => setForm({ ...form, u: e.target.value })} />
-              <input className={inp} placeholder="Password (min 6)" value={form.p} onChange={(e) => setForm({ ...form, p: e.target.value })} />
-              <div className="grid grid-cols-2 gap-3">
-                <select className={inp} value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })}><option value="Normal">Normal Server</option><option value="VIP">VIP Brilliant</option></select>
-                <select className={inp} value={form.days} onChange={(e) => setForm({ ...form, days: Number(e.target.value) })}><option value={30}>30 Days</option><option value={50}>50 Days</option><option value={90}>90 Days</option></select>
-              </div>
-              <select className={inp} value={form.bw} onChange={(e) => setForm({ ...form, bw: e.target.value })}><option value="10">10 GB</option><option value="30">30 GB</option><option value="200">200 GB</option><option value="Unlimited">Unlimited</option></select>
-              <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">Price (balance se kate ga)</span><b className="text-lg">৳{price}</b></div>
+              <input className={inp} inputMode="tel" placeholder="Customer phone / WhatsApp number with country code" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <select className={inp} value={form.months} onChange={(e) => setForm({ ...form, months: Number(e.target.value) })}>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''}</option>)}</select>
+              <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">{isAdmin ? 'Admin account: no credits are used' : 'Credits used (1 credit = 1 month)'}</span><b className="text-lg">{isAdmin ? 0 : form.months}</b></div>
+              <div className="text-xs text-[var(--mut)]">One account per phone number. The same number cannot be added twice.</div>
               {err && <div className="text-sm font-semibold text-rose-500">{err}</div>}
               <button className={`${primary} w-full`} onClick={create}>Create Account</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {renewFor && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setRenewFor(null)}>
+          <div className={`${card} w-full max-w-sm p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
+            <div className="flex items-center justify-between mb-3"><h3 className="text-lg font-black">Renew {renewFor.username}</h3><button onClick={() => setRenewFor(null)}><X className="h-5 w-5" /></button></div>
+            <div className="text-xs text-[var(--mut)] mb-3">Start: {renewFor.startDate || '-'} · Expires: {renewFor.expiryDate}</div>
+            <select className={`${inp} mb-3`} value={renewMonths} onChange={(e) => setRenewMonths(Number(e.target.value))}>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''}</option>)}</select>
+            <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm mb-4"><span className="text-[var(--mut)]">{isAdmin ? 'Admin: no credits used' : 'Credits deducted'}</span><b className="text-lg">{isAdmin ? 0 : renewMonths}</b></div>
+            <button className={`${primary} w-full`} onClick={renew}>Renew</button>
           </div>
         </div>
       )}
@@ -326,10 +390,10 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           <div className={`${card} w-full max-w-md p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
             <div className="flex items-center justify-between mb-1"><h3 className="text-lg font-black">Your VPN Account is Ready</h3><button onClick={() => setSlip(null)}><X className="h-5 w-5" /></button></div>
             <p className="text-sm text-[var(--mut)] mb-4">Send these details to the customer on WhatsApp</p>
-            {([['Username', slip.username], ['Password', slip.password], ['Import Link', slip.importLink]] as [string, string][]).map(([k, v]) => (
+            {([['Phone number', slip.username], ['Expires', slip.expiryDate], ['Import Link', slip.importLink]] as [string, string][]).map(([k, v]) => (
               <div key={k} className="mb-2 flex items-center gap-2 rounded-xl bg-[var(--soft)] px-3.5 py-2.5"><div className="min-w-0 flex-1"><div className="text-[10px] font-bold uppercase text-[var(--mut)]">{k}</div><div className="truncate text-sm font-semibold">{v}</div></div>
                 <button className={`${ghost} !p-2`} onClick={() => flash(k, v)}>{copied === k ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>))}
-            <button className={`${primary} w-full mt-3`} onClick={() => flash('all', `Username: ${slip.username}\nPassword: ${slip.password}\nImport Link: ${slip.importLink}`)}>{copied === 'all' ? 'Copied!' : 'COPY ALL'}</button>
+            <button className={`${primary} w-full mt-3`} onClick={() => flash('all', `Phone: ${slip.username}\nExpires: ${slip.expiryDate}\nImport Link: ${slip.importLink}`)}>{copied === 'all' ? 'Copied!' : 'COPY ALL'}</button>
           </div>
         </div>
       )}
