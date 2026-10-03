@@ -52,7 +52,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [user, setUser] = useState<any>(null);
   const [ready, setReady] = useState(false);
   const [prof, setProf] = useState<any>(null);
-  const [auth, setAuth] = useState({ email: '', password: '', name: '', signup: false });
+  const [auth, setAuth] = useState({ email: '', password: '', name: '', whatsapp: '', signup: false });
   const [msg, setMsg] = useState('');
   const [creditTo, setCreditTo] = useState('');
   const [pName, setPName] = useState('');
@@ -111,8 +111,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
 
   async function doAuth() {
     setMsg('');
+    if (auth.signup && auth.whatsapp.replace(/[^0-9]/g, '').length < 8) return setMsg('Enter your WhatsApp number with country code');
     const r = auth.signup
-      ? await supabase.auth.signUp({ email: auth.email, password: auth.password, options: { data: { name: auth.name } } })
+      ? await supabase.auth.signUp({ email: auth.email, password: auth.password, options: { data: { name: auth.name, whatsapp: auth.whatsapp } } })
       : await supabase.auth.signInWithPassword({ email: auth.email, password: auth.password });
     if (r.error) return setMsg(r.error.message);
     if (auth.signup && !r.data.session) setMsg('Account created. Check your email to confirm, then log in.');
@@ -248,6 +249,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
       <div className={`${card} w-full max-w-sm p-7`}>
         <div className="mb-5 flex items-center gap-3"><div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div><div><div className="font-black">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">RESELLER LOGIN</div></div></div>
         {auth.signup && <input className={`${inp} mb-3`} placeholder="Name" value={auth.name} onChange={(e) => setAuth({ ...auth, name: e.target.value })} />}
+        {auth.signup && <input className={`${inp} mb-3`} inputMode="tel" placeholder="WhatsApp number with country code" value={auth.whatsapp} onChange={(e) => setAuth({ ...auth, whatsapp: e.target.value })} />}
         <input className={`${inp} mb-3`} type="email" placeholder="Email" value={auth.email} onChange={(e) => setAuth({ ...auth, email: e.target.value })} />
         <input className={`${inp} mb-3`} type="password" placeholder="Password (min 6)" value={auth.password} onChange={(e) => setAuth({ ...auth, password: e.target.value })} />
         {msg && <div className="mb-3 text-sm font-semibold text-rose-500">{msg}</div>}
