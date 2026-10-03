@@ -1,0 +1,6 @@
+{
+  "name": "BanglaDNS - Expat Mobile Banking & Smart DNS Portal",
+  "description": "Smart DNS proxy and user portal enabling overseas Bangladeshis to access bKash, Nagad, Rocket, Alaap, and Brilliant from Saudi Arabia, Malaysia, Pakistan, and worldwide.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
