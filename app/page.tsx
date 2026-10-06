@@ -505,7 +505,12 @@ export default function MaheHubEnterpriseSystem() {
   };
 
   // Real Apple .mobileconfig Download Generator (DNS over TLS DoT - Exact match of iOS video)
-  const downloadAppleProfile = (hostname: string, userTitle: string) => {
+  const downloadAppleProfile = (_hostname: string, userTitle: string) => {
+    const DNS_HOST = 'dns.mahehub.com';
+    const DNS_IP = '144.79.124.248';
+    const safeTitle = (userTitle || 'user').replace(/[^a-z0-9]/gi, '_');
+    const uuid1 = crypto.randomUUID().toUpperCase();
+    const uuid2 = crypto.randomUUID().toUpperCase();
     const mobileconfigXML = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -518,11 +523,10 @@ export default function MaheHubEnterpriseSystem() {
                 <key>DNSProtocol</key>
                 <string>TLS</string>
                 <key>ServerName</key>
-                <string>${hostname}</string>
+                <string>${DNS_HOST}</string>
                 <key>ServerAddresses</key>
                 <array>
-                    <string>103.145.118.10</string>
-                    <string>103.145.118.11</string>
+                    <string>${DNS_IP}</string>
                 </array>
             </dict>
             <key>PayloadDescription</key>
@@ -530,11 +534,11 @@ export default function MaheHubEnterpriseSystem() {
             <key>PayloadDisplayName</key>
             <string>MaheHub DNS (DoT)</string>
             <key>PayloadIdentifier</key>
-            <string>com.mahehub.dns.${userTitle}</string>
+            <string>com.mahehub.dns.${safeTitle}</string>
             <key>PayloadType</key>
             <string>com.apple.dnsSettings.managed</string>
             <key>PayloadUUID</key>
-            <string>3A8C5E78-22F1-4E6B-A48E-${Math.floor(100000 + Math.random() * 900000)}</string>
+            <string>${uuid1}</string>
             <key>PayloadVersion</key>
             <integer>1</integer>
         </dict>
@@ -542,9 +546,9 @@ export default function MaheHubEnterpriseSystem() {
     <key>PayloadDescription</key>
     <string>Native iOS Zero-App encrypted DNS bypass for overseas Bangladeshis.</string>
     <key>PayloadDisplayName</key>
-    <string>MaheHub DNS (DoT) - ${userTitle}</string>
+    <string>MaheHub DNS (DoT) - ${safeTitle}</string>
     <key>PayloadIdentifier</key>
-    <string>com.mahehub.profile.${userTitle}</string>
+    <string>com.mahehub.profile.${safeTitle}</string>
     <key>PayloadOrganization</key>
     <string>MaheHub Networks Bangladesh</string>
     <key>PayloadRemovalDisallowed</key>
@@ -552,7 +556,7 @@ export default function MaheHubEnterpriseSystem() {
     <key>PayloadType</key>
     <string>Configuration</string>
     <key>PayloadUUID</key>
-    <string>6F12C889-4D88-4A12-B245-${Math.floor(100000 + Math.random() * 900000)}</string>
+    <string>${uuid2}</string>
     <key>PayloadVersion</key>
     <integer>1</integer>
 </dict>
@@ -1405,7 +1409,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                   </button>
 
                   <button
-                    onClick={() => copyText(homeGeneratorHost, 'home-host-copy')}
+                    onClick={() => copyText('dns.mahehub.com', 'home-host-copy')}
                     className="py-3 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
                   >
                     {copiedKey === 'home-host-copy' ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
