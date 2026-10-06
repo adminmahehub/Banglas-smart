@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Network, PlusCircle, Activity, KeyRound, UserCircle, LogOut, Search,
-  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check,
+  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle,
 } from 'lucide-react';
 import type { OpenVpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
@@ -31,6 +31,7 @@ const btn = 'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.
 const primary = `${btn} bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/25 hover:brightness-110`;
 const ghost = `${btn} border border-[var(--line)] bg-[var(--card)] text-[var(--ink)] hover:bg-[var(--soft)]`;
 
+function waNumber(p: string) { const d = String(p).replace(/\D/g, ''); return d.startsWith('0') ? '880' + d.slice(1) : d; }
 function copy(t: string) { try { navigator.clipboard?.writeText(t); } catch { /* ignore */ } }
 function fmtGb(a: OpenVpnAccount) {
   const used = a.usedMb >= 1024 ? `${(a.usedMb / 1024).toFixed(1)} GB` : `${a.usedMb} MB`;
@@ -66,6 +67,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [resellers, setResellers] = useState<any[]>([]);
   const [form, setForm] = useState({ phone: '', months: 1, bw: 'Unlimited' });
   const [renewFor, setRenewFor] = useState<OpenVpnAccount | null>(null);
+  const [dnsLink, setDnsLink] = useState<{ username: string; url: string } | null>(null);
   const [renewMonths, setRenewMonths] = useState(1);
   const [renewGb, setRenewGb] = useState(0);
   const [coupon, setCoupon] = useState('');
@@ -124,6 +126,16 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const { data, error } = await supabase.rpc('create_customer', { p_phone: form.phone, p_months: form.months, p_bw: form.bw });
     if (error) return setErr(error.message);
     await load(); setModal(false); setSlip(toAcc(data)); setForm({ phone: '', months: 1, bw: 'Unlimited' });
+  }
+  async function makeLink(a: OpenVpnAccount) {
+    if (!confirm('Create a new customer link for ' + a.username + '? If a link was sent before, it will stop working.')) return;
+    const { data, error } = await supabase.rpc('generate_customer_link', { p_username: a.username });
+    if (error || !data) { alert('Could not create the link: ' + (error?.message || 'unknown error')); return; }
+    setDnsLink({ username: a.username, url: `${window.location.origin}/c/?t=${data}` });
+  }
+  async function dnsAction(kind: 'clear' | 'unblock', username: string) {
+    const { error } = await supabase.rpc(kind === 'clear' ? 'dns_clear_ip' : 'dns_unblock', { p_username: username });
+    alert(error ? error.message : (kind === 'clear' ? 'IP cleared. The customer must press Activate again.' : 'Customer unblocked.'));
   }
   async function renew() {
     if (!renewFor) return;
@@ -235,6 +247,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
               <button title="Import link / slip" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Copy className="h-4 w-4" /></button>
               <button title="Download .ovpn" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
+              <button title="Customer link (DNS)" onClick={() => makeLink(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
               <button title="Renew (choose months)" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
               <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
               <button title="Delete" onClick={() => del(a)} className={`${ghost} !p-2 text-rose-500`}><Trash2 className="h-4 w-4" /></button></div></td>}
@@ -387,6 +400,24 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             {renewFor.bandwidthType === 'Limited' && <select className={`${inp} mb-3`} value={renewGb} onChange={(e) => setRenewGb(Number(e.target.value))}>{[0, 10, 30, 50, 100, 200, 500].map((g) => <option key={g} value={g}>{g === 0 ? 'No extra bandwidth' : `Add ${g} GB`}</option>)}</select>}
             <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm mb-4"><span className="text-[var(--mut)]">{isAdmin ? 'Admin: no credits used' : 'Credits deducted'}</span><b className="text-lg">{isAdmin ? 0 : renewMonths}</b></div>
             <button className={`${primary} w-full`} onClick={renew}>Renew</button>
+          </div>
+        </div>
+      )}
+
+      {dnsLink && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setDnsLink(null)}>
+          <div className={`${card} w-full max-w-md p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
+            <div className="flex items-center justify-between mb-1"><h3 className="text-lg font-black">Customer link</h3><button onClick={() => setDnsLink(null)}><X className="h-5 w-5" /></button></div>
+            <p className="text-sm text-[var(--mut)] mb-4">Send this private link to {dnsLink.username}. They can download the iPhone profile, copy the Android DNS hostname and activate their IP from it.</p>
+            <div className="mb-3 rounded-xl bg-[var(--soft)] px-3.5 py-2.5"><div className="break-all text-xs font-semibold">{dnsLink.url}</div></div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <button className={ghost} onClick={() => flash('dnslink', dnsLink.url)}>{copied === 'dnslink' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy link</button>
+              <a className={primary} target="_blank" rel="noreferrer" href={`https://wa.me/${waNumber(dnsLink.username)}?text=${encodeURIComponent('Your MaheHub DNS is ready. Open this link to set it up: ' + dnsLink.url)}`}><MessageCircle className="h-4 w-4" /> Send on WhatsApp</a>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button className={ghost} onClick={() => dnsAction('clear', dnsLink.username)}>Clear IP</button>
+              {isAdmin && <button className={ghost} onClick={() => dnsAction('unblock', dnsLink.username)}>Unblock</button>}
+            </div>
           </div>
         </div>
       )}
