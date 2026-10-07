@@ -169,7 +169,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   }
   async function dnsAction(kind: 'clear' | 'unblock', username: string) {
     const { error } = await supabase.rpc(kind === 'clear' ? 'dns_clear_ip' : 'dns_unblock', { p_username: username });
-    alert(error ? error.message : (kind === 'clear' ? 'IP cleared. The customer must press Activate again.' : 'Customer unblocked.'));
+    alert(error ? error.message : (kind === 'clear' ? 'Device lock cleared. The customer can now press Activate on the new phone.' : 'Customer unblocked.'));
   }
   async function renew() {
     if (!renewFor) return;
@@ -476,10 +476,10 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <button className={ghost} onClick={() => flash('dnslink', dnsLink.url)}>{copied === 'dnslink' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy link</button>
               <a className={primary} target="_blank" rel="noreferrer" href={`https://wa.me/${waNumber(dnsLink.username)}?text=${encodeURIComponent('Your MaheHub DNS is ready. Open this link to set it up: ' + dnsLink.url)}`}><MessageCircle className="h-4 w-4" /> Send on WhatsApp</a>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button className={ghost} onClick={() => dnsAction('clear', dnsLink.username)}>Clear IP</button>
-              {isAdmin && <button className={ghost} onClick={() => dnsAction('unblock', dnsLink.username)}>Unblock</button>}
-            </div>
+            {isAdmin && <div className="grid grid-cols-2 gap-2">
+              <button className={ghost} onClick={() => dnsAction('clear', dnsLink.username)}>Clear device lock</button>
+              <button className={ghost} onClick={() => dnsAction('unblock', dnsLink.username)}>Unblock</button>
+            </div>}
           </div>
         </div>
       )}

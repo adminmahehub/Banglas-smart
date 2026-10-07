@@ -18,10 +18,12 @@ export default function CustomerPage() {
   const [info, setInfo] = useState<Info | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [act, setAct] = useState('');
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('t') || '';
     setToken(t);
+    setAct(new URLSearchParams(window.location.search).get('act') || '');
     if (!t) { setInfo({ found: false }); setLoading(false); return; }
     fetch(`${BASE}?t=${encodeURIComponent(t)}`)
       .then((r) => (r.ok ? r.json() : { found: false }))
@@ -68,6 +70,12 @@ export default function CustomerPage() {
                 ? <div className="mt-1 text-xs text-[#97a0c8]">Activated for IP: {info.bound_ip}</div>
                 : <div className="mt-1 text-xs text-amber-400">Not activated yet. Press “Activate my IP” below.</div>}
             </div>
+
+            {act === 'locked' && (
+              <div className="mb-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-300">
+                This DNS is locked to another device. Please contact your seller to unlock it.
+              </div>
+            )}
 
             {!info.valid ? (
               <div className={card}>
