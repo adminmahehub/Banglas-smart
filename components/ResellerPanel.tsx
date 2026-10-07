@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import type { OpenVpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
+import { COUNTRIES } from '../lib/countries';
 
 type Tab = 'dashboard' | 'users' | 'resellers' | 'credit' | 'activity' | 'api' | 'profile';
 const NAV: { id: Tab; label: string; icon: any }[] = [
@@ -24,12 +25,6 @@ const PRICE: Record<string, Record<string, number>> = {
   VIP: { '10': 70, '30': 120, '200': 300, Unlimited: 240 },
 };
 const PER_CREDIT = 200; // 10 credits = ৳2000
-const COUNTRIES: { cc: string; n: string }[] = [
-  { cc: '880', n: 'Bangladesh' }, { cc: '966', n: 'Saudi Arabia' }, { cc: '968', n: 'Oman' }, { cc: '971', n: 'UAE' },
-  { cc: '965', n: 'Kuwait' }, { cc: '974', n: 'Qatar' }, { cc: '973', n: 'Bahrain' }, { cc: '60', n: 'Malaysia' },
-  { cc: '65', n: 'Singapore' }, { cc: '91', n: 'India' }, { cc: '92', n: 'Pakistan' }, { cc: '44', n: 'UK' },
-  { cc: '1', n: 'USA / Canada' }, { cc: '39', n: 'Italy' }, { cc: '81', n: 'Japan' }, { cc: '61', n: 'Australia' },
-];
 const HOST = { Normal: 'my.ovpn.ovh', VIP: 'vip.ovpn.ovh' } as const;
 const card = 'rounded-2xl bg-[var(--card)] border border-[var(--line)] shadow-[0_8px_30px_rgba(60,72,140,0.07)]';
 const inp = 'w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3.5 py-2.5 text-sm text-[var(--ink)] outline-none focus:border-indigo-400';
@@ -71,7 +66,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [modal, setModal] = useState(false);
   const [slip, setSlip] = useState<OpenVpnAccount | null>(null);
   const [resellers, setResellers] = useState<any[]>([]);
-  const [form, setForm] = useState({ cc: '880', phone: '', months: 1 });
+  const [form, setForm] = useState({ country: 'BD', phone: '', months: 1 });
   const [renewFor, setRenewFor] = useState<OpenVpnAccount | null>(null);
   const [dnsLink, setDnsLink] = useState<{ username: string; url: string } | null>(null);
   const [renewMonths, setRenewMonths] = useState(1);
@@ -140,10 +135,10 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setErr('');
     const local = form.phone.replace(/\D/g, '').replace(/^0+/, '');
     if (local.length < 6) return setErr('Enter the phone number');
-    const full = form.cc + local;
+    const full = (COUNTRIES.find((c) => c.id === form.country)?.cc || '880') + local;
     const { data, error } = await supabase.rpc('create_customer', { p_phone: full, p_months: form.months, p_bw: 'Unlimited' });
     if (error) return setErr(error.message);
-    await load(); setModal(false); setForm({ cc: form.cc, phone: '', months: 1 });
+    await load(); setModal(false); setForm({ country: form.country, phone: '', months: 1 });
     const lk = await supabase.rpc('generate_customer_link', { p_username: data.username });
     if (lk.error || !lk.data) { alert('Account created, but the link could not be made: ' + (lk.error?.message || 'unknown error') + '. Use the Customer link button in the Users list.'); return; }
     setDnsLink({ username: data.username, url: `${window.location.origin}/c/?t=${lk.data}` });
@@ -440,7 +435,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-black">Add User</h3><button onClick={() => setModal(false)}><X className="h-5 w-5" /></button></div>
             <div className="space-y-3">
               <div className="flex gap-2">
-                <select className={`${inp} !w-36 shrink-0`} value={form.cc} onChange={(e) => setForm({ ...form, cc: e.target.value })}>{COUNTRIES.map((c) => <option key={c.cc} value={c.cc}>{c.n} +{c.cc}</option>)}</select>
+                <select className={`${inp} !w-36 shrink-0`} value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })}>{COUNTRIES.map((c) => <option key={c.id} value={c.id}>{c.n} +{c.cc}</option>)}</select>
                 <input className={inp} inputMode="tel" placeholder="WhatsApp number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               </div>
               <select className={inp} value={form.months} onChange={(e) => setForm({ ...form, months: Number(e.target.value) })}>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''}</option>)}</select>
