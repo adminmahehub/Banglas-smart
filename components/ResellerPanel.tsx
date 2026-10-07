@@ -24,6 +24,12 @@ const PRICE: Record<string, Record<string, number>> = {
   VIP: { '10': 70, '30': 120, '200': 300, Unlimited: 240 },
 };
 const PER_CREDIT = 200; // 10 credits = ৳2000
+const COUNTRIES: { cc: string; n: string }[] = [
+  { cc: '880', n: 'Bangladesh' }, { cc: '966', n: 'Saudi Arabia' }, { cc: '968', n: 'Oman' }, { cc: '971', n: 'UAE' },
+  { cc: '965', n: 'Kuwait' }, { cc: '974', n: 'Qatar' }, { cc: '973', n: 'Bahrain' }, { cc: '60', n: 'Malaysia' },
+  { cc: '65', n: 'Singapore' }, { cc: '91', n: 'India' }, { cc: '92', n: 'Pakistan' }, { cc: '44', n: 'UK' },
+  { cc: '1', n: 'USA / Canada' }, { cc: '39', n: 'Italy' }, { cc: '81', n: 'Japan' }, { cc: '61', n: 'Australia' },
+];
 const HOST = { Normal: 'my.ovpn.ovh', VIP: 'vip.ovpn.ovh' } as const;
 const card = 'rounded-2xl bg-[var(--card)] border border-[var(--line)] shadow-[0_8px_30px_rgba(60,72,140,0.07)]';
 const inp = 'w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3.5 py-2.5 text-sm text-[var(--ink)] outline-none focus:border-indigo-400';
@@ -65,7 +71,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [modal, setModal] = useState(false);
   const [slip, setSlip] = useState<OpenVpnAccount | null>(null);
   const [resellers, setResellers] = useState<any[]>([]);
-  const [form, setForm] = useState({ phone: '', months: 1, bw: 'Unlimited' });
+  const [form, setForm] = useState({ cc: '880', phone: '', months: 1 });
   const [renewFor, setRenewFor] = useState<OpenVpnAccount | null>(null);
   const [dnsLink, setDnsLink] = useState<{ username: string; url: string } | null>(null);
   const [renewMonths, setRenewMonths] = useState(1);
@@ -78,6 +84,10 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [err, setErr] = useState('');
   const [topup, setTopup] = useState<number>(0);
   const [copied, setCopied] = useState('');
+  const [reqs, setReqs] = useState<any[]>([]);
+  const [pay, setPay] = useState({ method: 'bKash', number: '', price: 200 });
+  const [reqCredits, setReqCredits] = useState<number>(10);
+  const [trx, setTrx] = useState('');
   const toAcc = (r: any): OpenVpnAccount => ({
     id: r.id, username: r.username, password: r.password, server: r.server_tier === 'VIP' ? 'VIP Brilliant' : 'Normal Dhaka',
     serverHost: r.server_host, days: r.days, bandwidthType: r.bandwidth_type, bandwidthGb: r.bandwidth_gb, usedMb: Number(r.used_mb),
@@ -99,6 +109,11 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setAccounts((v.data || []).map(toAcc));
     const cp = await supabase.from('coupons').select('*').order('created_at', { ascending: false });
     setCoupons(cp.data || []);
+    const cr = await supabase.from('credit_requests').select('*').order('created_at', { ascending: false }).limit(100);
+    setReqs(cr.data || []);
+    const st = await supabase.from('app_settings').select('key,value');
+    const sm: Record<string, string> = {}; (st.data || []).forEach((x: any) => { sm[x.key] = x.value; });
+    setPay({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: Number(sm.price_per_credit) || PER_CREDIT });
     setLog((a.data || []).map((x: any) => ({ t: new Date(x.created_at).toLocaleString(), m: x.message })));
   };
   useEffect(() => {
@@ -123,9 +138,28 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   }
   async function create() {
     setErr('');
-    const { data, error } = await supabase.rpc('create_customer', { p_phone: form.phone, p_months: form.months, p_bw: form.bw });
+    const local = form.phone.replace(/\D/g, '').replace(/^0+/, '');
+    if (local.length < 6) return setErr('Enter the phone number');
+    const full = form.cc + local;
+    const { data, error } = await supabase.rpc('create_customer', { p_phone: full, p_months: form.months, p_bw: 'Unlimited' });
     if (error) return setErr(error.message);
-    await load(); setModal(false); setSlip(toAcc(data)); setForm({ phone: '', months: 1, bw: 'Unlimited' });
+    await load(); setModal(false); setForm({ cc: form.cc, phone: '', months: 1 });
+    const lk = await supabase.rpc('generate_customer_link', { p_username: data.username });
+    if (lk.error || !lk.data) { alert('Account created, but the link could not be made: ' + (lk.error?.message || 'unknown error') + '. Use the Customer link button in the Users list.'); return; }
+    setDnsLink({ username: data.username, url: `${window.location.origin}/c/?t=${lk.data}` });
+  }
+  async function submitTopup() {
+    const n = Math.floor(Number(reqCredits));
+    if (!n || n < 10) { alert('Minimum package is 10 credits.'); return; }
+    if (trx.trim().length < 6) { alert('Enter the Transaction ID (TrxID) of your payment.'); return; }
+    const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: pay.method });
+    if (error) { alert(error.message); return; }
+    alert('Request sent. Your credits will be added after the admin checks the payment.'); setTrx(''); load();
+  }
+  async function resolveReq(id: string, ok: boolean) {
+    if (!confirm(ok ? 'Approve this request and add the credits?' : 'Reject this request?')) return;
+    const { error } = await supabase.rpc('resolve_credit_request', { p_id: id, p_approve: ok });
+    if (error) alert(error.message); else load();
   }
   async function makeLink(a: OpenVpnAccount) {
     if (!confirm('Create a new customer link for ' + a.username + '? If a link was sent before, it will stop working.')) return;
@@ -338,8 +372,34 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           </>)}
 
           {tab === 'credit' && (<>
-            <Head t="Add Credit" s={isAdmin ? 'Add credit to a reseller balance' : 'Credit is added by the admin'} />
-            {!isAdmin ? <div className={`${card} p-6 text-sm space-y-2`}><div>Your credits: <b>{credits}</b> (1 credit = 1 month)</div><div className="text-[var(--mut)]">Minimum package: 10 credits (৳2000). To buy credits, contact the admin on WhatsApp.</div></div> : (<>
+            <Head t="Add Credit" s={isAdmin ? 'Add credit to a reseller balance' : 'Buy credits and send the TrxID'} />
+            {!isAdmin ? (<div className="space-y-4">
+              <div className={`${card} p-6 text-sm space-y-3`}>
+                <div>Your credits: <b>{credits}</b> (1 credit = 1 month)</div>
+                <div className="text-xs font-bold text-[var(--mut)]">Choose credits (minimum 10)</div>
+                <div className="flex flex-wrap gap-2">{[10, 20, 30, 50].map((v) => (
+                  <button key={v} type="button" onClick={() => setReqCredits(v)} className={`${reqCredits === v ? primary : ghost} !px-4 !py-1.5 text-xs`}>{v}</button>))}</div>
+                <input type="number" inputMode="numeric" min={10} value={reqCredits || ''} onChange={(e) => setReqCredits(Number(e.target.value))} className={inp} placeholder="Or type credits" />
+                <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3"><span className="text-[var(--mut)]">Total price</span><b className="text-lg">৳{Math.max(0, Math.floor(reqCredits || 0)) * pay.price}</b></div>
+                <div className="rounded-xl bg-[var(--soft)] px-4 py-3">
+                  <div className="text-xs text-[var(--mut)]">Send the payment by {pay.method} to</div>
+                  <div className="flex items-center gap-2"><b className="text-base break-all">{pay.number || 'Ask the admin for the payment number'}</b>{pay.number && <button type="button" className={`${ghost} !p-2`} onClick={() => flash('paynum', pay.number)}>{copied === 'paynum' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>}</div>
+                </div>
+                <input value={trx} onChange={(e) => setTrx(e.target.value)} className={inp} placeholder="Transaction ID (TrxID) after payment" />
+                <button type="button" disabled={!reqCredits || reqCredits < 10 || trx.trim().length < 6} className={`${primary} w-full disabled:opacity-50`} onClick={submitTopup}><Wallet className="h-4 w-4" />Submit payment</button>
+              </div>
+              {reqs.length > 0 && <div className={`${card} divide-y divide-[var(--line)]`}>{reqs.map((r) => (
+                <div key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm"><span><b>{r.credits}</b> credits · ৳{Number(r.amount_bdt)} · <span className="text-xs text-[var(--mut)]">{r.trx_id}</span></span><span className={`text-xs font-bold ${r.status === 'approved' ? 'text-emerald-500' : r.status === 'rejected' ? 'text-rose-500' : 'text-amber-500'}`}>{r.status}</span></div>))}</div>}
+            </div>) : (<>
+              {reqs.some((r) => r.status === 'pending') && <div className={`${card} p-5 mb-6`}>
+                <div className="font-black mb-3">Payment requests</div>
+                {reqs.filter((r) => r.status === 'pending').map((r) => (
+                  <div key={r.id} className="border-t border-[var(--line)] py-3 text-sm">
+                    <div><b>{resellers.find((x: any) => x.id === r.owner_id)?.name || 'Reseller'}</b> · {r.credits} credits · ৳{Number(r.amount_bdt)}</div>
+                    <div className="text-xs text-[var(--mut)] mb-2">{r.method} · TrxID <b>{r.trx_id}</b> · {new Date(r.created_at).toLocaleString()}</div>
+                    <div className="flex gap-2"><button type="button" className={`${primary} !py-1.5 text-xs`} onClick={() => resolveReq(r.id, true)}>Approve</button><button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => resolveReq(r.id, false)}>Reject</button></div>
+                  </div>))}
+              </div>}
               <select className={`${inp} mb-4`} value={creditTo} onChange={(e) => setCreditTo(e.target.value)}><option value="">Select reseller</option>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (my account)' }] : []), ...resellers].map((r: any) => <option key={r.id} value={r.id}>{r.name} ({r.credits ?? 0} credits)</option>)}</select>
               <label className="text-xs font-bold text-[var(--mut)]">Credits to add (1 credit = 1 month)</label>
               <input type="number" inputMode="numeric" min={1} placeholder="Type credits, e.g. 10" value={topup || ''} onChange={(e) => setTopup(Number(e.target.value))} className={`${inp} mb-3`} />
@@ -379,13 +439,15 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           <div className={`${card} w-full max-w-md p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
             <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-black">Add User</h3><button onClick={() => setModal(false)}><X className="h-5 w-5" /></button></div>
             <div className="space-y-3">
-              <input className={inp} inputMode="tel" placeholder="Customer phone / WhatsApp number with country code" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <div className="flex gap-2">
+                <select className={`${inp} !w-36 shrink-0`} value={form.cc} onChange={(e) => setForm({ ...form, cc: e.target.value })}>{COUNTRIES.map((c) => <option key={c.cc} value={c.cc}>{c.n} +{c.cc}</option>)}</select>
+                <input className={inp} inputMode="tel" placeholder="WhatsApp number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              </div>
               <select className={inp} value={form.months} onChange={(e) => setForm({ ...form, months: Number(e.target.value) })}>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''}</option>)}</select>
-              <select className={inp} value={form.bw} onChange={(e) => setForm({ ...form, bw: e.target.value })}>{['Unlimited', '10', '30', '50', '100', '200', '500'].map((b) => <option key={b} value={b}>{b === 'Unlimited' ? 'Unlimited bandwidth' : `${b} GB bandwidth`}</option>)}</select>
               <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">{isAdmin ? 'Admin account: no credits are used' : 'Credits used (1 credit = 1 month)'}</span><b className="text-lg">{isAdmin ? 0 : form.months}</b></div>
-              <div className="text-xs text-[var(--mut)]">One account per phone number. The same number cannot be added twice.</div>
+              <div className="text-xs text-[var(--mut)]">One account per phone number. A private DNS link is made right after Create.</div>
               {err && <div className="text-sm font-semibold text-rose-500">{err}</div>}
-              <button className={`${primary} w-full`} onClick={create}>Create Account</button>
+              <button className={`${primary} w-full`} onClick={create}>Create & get link</button>
             </div>
           </div>
         </div>
