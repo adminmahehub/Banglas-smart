@@ -79,8 +79,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [dnsLink, setDnsLink] = useState<{ username: string; url: string } | null>(null);
   const [renewMonths, setRenewMonths] = useState(1);
   const [renewGb, setRenewGb] = useState(0);
-  const [coupon, setCoupon] = useState('');
-  const [couponPct, setCouponPct] = useState(0);
+  const [cpIn, setCpIn] = useState('');
+  const [cpApplied, setCpApplied] = useState<{ code: string; pct: number } | null>(null);
+  const [cpForm, setCpForm] = useState({ kind: 'credits', value: '10', uses: '1', days: '0', code: '' });
   const [coupons, setCoupons] = useState<any[]>([]);
   const [newCode, setNewCode] = useState('');
   const [newPct, setNewPct] = useState(10);
@@ -116,7 +117,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setProf(me); setPName(me?.name || ''); setPWa(me?.whatsapp || '');
     setResellers(me?.role === 'admin' ? rows.filter((x) => x.role === 'reseller') : []);
     setAccounts((v.data || []).map(toAcc));
-    const cp = await supabase.from('coupons').select('*').order('created_at', { ascending: false });
+    const cp = await supabase.from('reseller_coupons').select('*').order('created_at', { ascending: false });
     setCoupons(cp.data || []);
     const cr = await supabase.from('credit_requests').select('*').order('created_at', { ascending: false }).limit(100);
     setReqs(cr.data || []);
@@ -178,9 +179,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const n = Math.floor(Number(reqCredits));
     if (!n || n < 10) { alert('Minimum package is 10 credits.'); return; }
     if (trx.trim().length < 6) { alert('Enter the Transaction ID (TrxID) of your payment.'); return; }
-    const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: pay.method });
+    const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: pay.method, p_coupon: cpApplied?.code || null });
     if (error) { alert(error.message); return; }
-    alert('Request sent. Your credits will be added after the admin checks the payment.'); setTrx(''); load();
+    alert('Request sent. Your credits will be added after the admin checks the payment.'); setTrx(''); setCpIn(''); setCpApplied(null); load();
   }
   async function createReseller() {
     setRsErr('');
@@ -229,22 +230,30 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     alert('Renewed successfully.'); setRenewFor(null); setRenewMonths(1); setRenewGb(0); load();
   }
   async function checkCoupon() {
-    setCouponPct(0);
-    if (!coupon.trim()) return;
-    const { data } = await supabase.from('coupons').select('percent,active').ilike('code', coupon.trim()).maybeSingle();
-    if (!data || !data.active) { alert('Invalid or inactive coupon.'); return; }
-    setCouponPct(Number(data.percent));
+    const code = cpIn.trim();
+    if (!code) return;
+    const { data, error } = await supabase.rpc('check_coupon', { p_code: code });
+    if (error) { alert(error.message); setCpApplied(null); return; }
+    const d = data as any;
+    if (d.kind === 'credits') {
+      if (!confirm(`This coupon gives ${d.value} free credits. Redeem it now?`)) return;
+      const r = await supabase.rpc('redeem_gift_coupon', { p_code: code });
+      if (r.error) { alert(r.error.message); return; }
+      alert(`${d.value} credits added to your account.`); setCpIn(''); setCpApplied(null); load();
+    } else {
+      setCpApplied({ code: code.toUpperCase(), pct: Number(d.value) });
+    }
   }
   async function saveCoupon() {
-    const code = newCode.trim().toUpperCase();
-    if (!code || newPct < 1 || newPct > 100) { alert('Enter a code and a percent from 1 to 100.'); return; }
-    const { error } = await supabase.from('coupons').insert({ code, percent: newPct, active: true });
+    const v = Math.floor(Number(cpForm.value)), u = Math.floor(Number(cpForm.uses)), d = Math.floor(Number(cpForm.days) || 0);
+    if (!v || !u) { alert('Enter the value and how many times it can be used.'); return; }
+    const { data, error } = await supabase.rpc('admin_create_coupon', { p_code: cpForm.code.trim() || null, p_kind: cpForm.kind, p_value: v, p_max_uses: u, p_days: d });
     if (error) { alert(error.message); return; }
-    setNewCode(''); load();
+    alert(`Coupon created: ${(data as any).code}`); setCpForm({ ...cpForm, code: '' }); load();
   }
-  async function delCoupon(code: string) {
-    if (!confirm(`Delete coupon ${code}?`)) return;
-    await supabase.from('coupons').delete().eq('code', code); load();
+  async function toggleCoupon(id: string, active: boolean) {
+    const { error } = await supabase.rpc('admin_set_coupon_active', { p_id: id, p_active: active });
+    if (error) alert(error.message); else load();
   }
   async function setStatus(id: string, status: OpenVpnAccount['status'], username: string) {
     const { data: upd, error } = await supabase.from('vpn_accounts').update({ status }).eq('id', id).select('id');
@@ -278,10 +287,10 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const n = Math.floor(Number(topup));
     if (!creditTo) { alert('Select an account first.'); return; }
     if (!n || n <= 0) { alert('Enter the number of credits (1 credit = 1 month).'); return; }
-    const payable = Math.round(n * PER_CREDIT * (100 - couponPct) / 100);
+    const payable = Math.round(n * pay.price);
     if (!confirm(`Add ${n} credits? Payable: ৳${payable}`)) return;
-    const { error } = await supabase.rpc('admin_add_credits', { p_user: creditTo, p_credits: n, p_coupon: couponPct > 0 ? coupon.trim() : null });
-    if (error) alert(error.message); else { alert(`Added ${n} credits. Payable was ৳${payable}`); setTopup(0); setCoupon(''); setCouponPct(0); load(); }
+    const { error } = await supabase.rpc('admin_add_credits', { p_user: creditTo, p_credits: n, p_coupon: null });
+    if (error) alert(error.message); else { alert(`Added ${n} credits. Payable was ৳${payable}`); setTopup(0); load(); }
   }
   async function saveProfile() {
     if (!validWa(pWa)) return alert('WhatsApp number must start with + and the country code (example +966501234567)');
@@ -500,7 +509,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
                 <div className="flex flex-wrap gap-2">{[10, 20, 30, 50].map((v) => (
                   <button key={v} type="button" onClick={() => setReqCredits(v)} className={`${reqCredits === v ? primary : ghost} !px-4 !py-1.5 text-xs`}>{v}</button>))}</div>
                 <input type="number" inputMode="numeric" min={10} value={reqCredits || ''} onChange={(e) => setReqCredits(Number(e.target.value))} className={inp} placeholder="Or type credits" />
-                <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3"><span className="text-[var(--mut)]">Total price</span><b className="text-lg">৳{Math.max(0, Math.floor(reqCredits || 0)) * pay.price}</b></div>
+                <div className="flex gap-2"><input value={cpIn} onChange={(e) => { setCpIn(e.target.value); setCpApplied(null); }} placeholder="Coupon code (optional)" className={inp} /><button type="button" className={ghost} onClick={checkCoupon}>Apply</button></div>
+                {cpApplied && <div className="text-xs font-bold text-emerald-500">Coupon {cpApplied.code}: {cpApplied.pct}% off applied</div>}
+                <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3"><span className="text-[var(--mut)]">Total price</span><b className="text-lg">৳{Math.round(Math.max(0, Math.floor(reqCredits || 0)) * pay.price * (100 - (cpApplied?.pct || 0)) / 100)}</b></div>
                 <div className="rounded-xl bg-[var(--soft)] px-4 py-3">
                   <div className="text-xs text-[var(--mut)]">Send the payment by {pay.method} to</div>
                   <div className="flex items-center gap-2"><b className="text-base break-all">{pay.number || 'Ask the admin for the payment number'}</b>{pay.number && <button type="button" className={`${ghost} !p-2`} onClick={() => flash('paynum', pay.number)}>{copied === 'paynum' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>}</div>
@@ -523,7 +534,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
                 {reqs.filter((r) => r.status === 'pending').map((r) => (
                   <div key={r.id} className="border-t border-[var(--line)] py-3 text-sm">
                     <div><b>{resellers.find((x: any) => x.id === r.owner_id)?.name || 'Reseller'}</b> · {r.credits} credits · ৳{Number(r.amount_bdt)}</div>
-                    <div className="text-xs text-[var(--mut)] mb-2">{r.method} · TrxID <b>{r.trx_id}</b> · {new Date(r.created_at).toLocaleString()}</div>
+                    <div className="text-xs text-[var(--mut)] mb-2">{r.method} · TrxID <b>{r.trx_id}</b>{r.discount_percent > 0 ? ` · coupon ${r.coupon_code} (-${r.discount_percent}%)` : ''} · {new Date(r.created_at).toLocaleString()}</div>
                     <div className="flex gap-2"><button type="button" className={`${primary} !py-1.5 text-xs`} onClick={() => resolveReq(r.id, true)}>Approve</button><button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => resolveReq(r.id, false)}>Reject</button></div>
                   </div>))}
               </div>}
@@ -532,15 +543,25 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <input type="number" inputMode="numeric" min={1} placeholder="Type credits, e.g. 10" value={topup || ''} onChange={(e) => setTopup(Number(e.target.value))} className={`${inp} mb-3`} />
               <div className="flex flex-wrap gap-2 mb-4">{[10, 20, 50, 100].map((v) => (
                 <button key={v} type="button" onClick={() => setTopup(v)} className={`${ghost} !px-3 !py-1.5 text-xs`}>{v}</button>))}</div>
-              <label className="text-xs font-bold text-[var(--mut)]">Coupon code (optional)</label>
-              <div className="flex gap-2 mb-3"><input value={coupon} onChange={(e) => { setCoupon(e.target.value); setCouponPct(0); }} placeholder="Coupon" className={inp} /><button type="button" className={ghost} onClick={checkCoupon}>Apply</button></div>
-              <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">Payable (10 credits = ৳2000){couponPct > 0 ? ` · ${couponPct}% off` : ''}</span><b className="text-lg">৳{Math.round((topup || 0) * PER_CREDIT * (100 - couponPct) / 100)}</b></div>
+              <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">Payable (10 credits = ৳{pay.price * 10})</span><b className="text-lg">৳{Math.round((topup || 0) * pay.price)}</b></div>
               <button disabled={!creditTo || !topup} className={`${primary} mt-5 disabled:opacity-50`} onClick={addCredit}><Wallet className="h-4 w-4" />Add {topup || 0} Credits</button>
-              <div className={`${card} p-5 mt-8`}>
-                <div className="font-black mb-3">Coupons</div>
-                <div className="flex gap-2 mb-3"><input value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder="CODE" className={inp} /><input type="number" min={1} max={100} value={newPct} onChange={(e) => setNewPct(Number(e.target.value))} className={`${inp} !w-24`} /><button type="button" className={primary} onClick={saveCoupon}>Add</button></div>
-                {coupons.length === 0 && <div className="text-sm text-[var(--mut)]">No coupons yet. Percent off is applied when you add credits.</div>}
-                {coupons.map((c) => <div key={c.code} className="flex items-center justify-between border-t border-[var(--line)] py-2 text-sm"><span><b>{c.code}</b> · {c.percent}% off</span><button type="button" className="text-rose-500" onClick={() => delCoupon(c.code)}>Delete</button></div>)}
+              <div className={`${card} p-5 mt-8 space-y-3`}>
+                <div className="font-black">Coupon codes</div>
+                <div className="text-xs text-[var(--mut)]">Gift = free credits when the reseller redeems it. Discount = percent off when the reseller buys credits.</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <select className={inp} value={cpForm.kind} onChange={(e) => setCpForm({ ...cpForm, kind: e.target.value, value: e.target.value === 'credits' ? '10' : '5' })}><option value="credits">Gift credits</option><option value="discount">Discount %</option></select>
+                  <input className={inp} inputMode="numeric" value={cpForm.value} onChange={(e) => setCpForm({ ...cpForm, value: e.target.value.replace(/\D/g, '') })} placeholder={cpForm.kind === 'credits' ? 'Credits' : 'Percent'} />
+                  <input className={inp} inputMode="numeric" value={cpForm.uses} onChange={(e) => setCpForm({ ...cpForm, uses: e.target.value.replace(/\D/g, '') })} placeholder="Max uses" />
+                  <input className={inp} inputMode="numeric" value={cpForm.days} onChange={(e) => setCpForm({ ...cpForm, days: e.target.value.replace(/\D/g, '') })} placeholder="Valid days (0 = no expiry)" />
+                </div>
+                <input className={inp} value={cpForm.code} onChange={(e) => setCpForm({ ...cpForm, code: e.target.value.toUpperCase() })} placeholder="Code (leave empty to auto-generate)" />
+                <button type="button" className={`${primary} w-full`} onClick={saveCoupon}>Create coupon</button>
+                {coupons.length === 0 && <div className="text-sm text-[var(--mut)]">No coupons yet.</div>}
+                {coupons.map((c) => <div key={c.id} className="flex items-center justify-between gap-2 border-t border-[var(--line)] pt-3 text-sm">
+                  <div className="min-w-0"><div className="flex items-center gap-2"><b className="break-all">{c.code}</b><button type="button" className={`${ghost} !p-1.5`} onClick={() => flash('cp' + c.id, c.code)}>{copied === 'cp' + c.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button></div>
+                    <div className="text-xs text-[var(--mut)]">{c.kind === 'credits' ? `${c.value} free credits` : `${c.value}% off`} · used {c.used_count}/{c.max_uses}{c.expires_at ? ` · until ${new Date(c.expires_at).toLocaleDateString('en-GB')}` : ''}</div></div>
+                  <button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => toggleCoupon(c.id, !c.active)}>{c.active ? 'Disable' : 'Enable'}</button>
+                </div>)}
               </div></>)}</>)}
 
           {tab === 'activity' && (<><Head t="Activity" s="Recent panel activity" />
