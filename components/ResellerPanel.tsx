@@ -65,6 +65,11 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [q, setQ] = useState('');
   const [log, setLog] = useState<{ t: string; m: string }[]>([]);
   const [modal, setModal] = useState(false);
+  const [rsModal, setRsModal] = useState(false);
+  const [rsForm, setRsForm] = useState({ name: '', country: 'BD', phone: '', email: '', password: '' });
+  const [rsErr, setRsErr] = useState('');
+  const [rsBusy, setRsBusy] = useState(false);
+  const [rsDone, setRsDone] = useState<{ email: string; password: string; phone: string } | null>(null);
   const [slip, setSlip] = useState<OpenVpnAccount | null>(null);
   const [resellers, setResellers] = useState<any[]>([]);
   const [form, setForm] = useState({ country: 'BD', phone: '', months: 1 });
@@ -176,6 +181,24 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: pay.method });
     if (error) { alert(error.message); return; }
     alert('Request sent. Your credits will be added after the admin checks the payment.'); setTrx(''); load();
+  }
+  async function createReseller() {
+    setRsErr('');
+    const local = rsForm.phone.replace(/\D/g, '').replace(/^0+/, '');
+    const cc = COUNTRIES.find((c) => c.id === rsForm.country)?.cc || '880';
+    if (rsForm.name.trim().length < 2) return setRsErr('Enter the reseller name');
+    if (local.length < 6) return setRsErr('Enter the WhatsApp number');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rsForm.email.trim())) return setRsErr('Enter a valid email');
+    if (rsForm.password.length < 6) return setRsErr('Password must be at least 6 characters');
+    setRsBusy(true);
+    const { data, error } = await supabase.functions.invoke('create-reseller', { body: { name: rsForm.name, whatsapp: cc + local, email: rsForm.email, password: rsForm.password } });
+    setRsBusy(false);
+    let m = (data as any)?.error || '';
+    if (!m && error) { try { m = (await (error as any).context?.json?.())?.error || ''; } catch { /* ignore */ } m = m || error.message; }
+    if (m) return setRsErr(m);
+    setRsDone({ email: rsForm.email.trim(), password: rsForm.password, phone: cc + local });
+    setRsForm({ name: '', country: rsForm.country, phone: '', email: '', password: '' });
+    load();
   }
   async function savePay() {
     for (const [k, v] of [['pay_method', payEdit.method], ['pay_number', payEdit.number], ['price_per_credit', payEdit.price]] as const) {
@@ -455,7 +478,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           </>)}
 
           {tab === 'resellers' && (<>
-            <Head t={isAdmin ? 'Resellers' : 'My Team'} s={isAdmin ? 'All reseller accounts, who invited them and their team sales' : 'Resellers who joined through your referral link'} />
+            <Head t={isAdmin ? 'Resellers' : 'My Team'} s={isAdmin ? 'All reseller accounts, who invited them and their team sales' : 'Resellers who joined through your referral link'}><button className={primary} onClick={() => { setRsDone(null); setRsErr(''); setRsModal(true); }}><UserPlus className="h-4 w-4" />Add Reseller</button></Head>
             {isAdmin ? (
               <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[760px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Credits', 'Invited by', 'Team', 'Team sales ৳', 'Joined', ''].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
                 <tbody>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)', _me: true }] : []), ...((stats?.per_reseller || resellers) as any[])].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{r._me ? '-' : (r.upline_name || 'Admin')}</td><td className="px-4 py-3">{r._me ? '-' : `${r.direct_count ?? 0} direct · ${r.team_count ?? 0} total`}</td><td className="px-4 py-3">{r._me ? '-' : Number(r.team_sales_bdt ?? 0).toLocaleString()}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3"><button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button></td></tr>)}
@@ -568,6 +591,35 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               {err && <div className="text-sm font-semibold text-rose-500">{err}</div>}
               <button className={`${primary} w-full`} onClick={create}>Create & get link</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {rsModal && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setRsModal(false)}>
+          <div className={`${card} w-full max-w-md p-6 max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
+            <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-black">Add Reseller</h3><button onClick={() => setRsModal(false)}><X className="h-5 w-5" /></button></div>
+            {rsDone ? (
+              <div className="space-y-3 text-sm">
+                <div className="rounded-xl bg-emerald-500/15 px-4 py-3 font-bold text-emerald-500">Reseller account created.</div>
+                <div className="rounded-xl bg-[var(--soft)] px-4 py-3 space-y-1"><div>Email: <b className="break-all">{rsDone.email}</b></div><div>Password: <b className="break-all">{rsDone.password}</b></div></div>
+                <a className={`${primary} w-full`} target="_blank" rel="noreferrer" href={`https://wa.me/${rsDone.phone}?text=${encodeURIComponent(`Your MaheHub reseller account is ready.\nLogin: ${typeof window !== 'undefined' ? window.location.origin : ''}\nEmail: ${rsDone.email}\nPassword: ${rsDone.password}\nPlease change your password after the first login.`)}`}><MessageCircle className="h-4 w-4" /> Send on WhatsApp</a>
+                <button className={`${ghost} w-full`} onClick={() => setRsDone(null)}>Add another reseller</button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <input className={inp} placeholder="Reseller name" value={rsForm.name} onChange={(e) => setRsForm({ ...rsForm, name: e.target.value })} />
+                <div className="flex gap-2">
+                  <select className={`${inp} !w-36 shrink-0`} value={rsForm.country} onChange={(e) => setRsForm({ ...rsForm, country: e.target.value })}>{COUNTRIES.map((c) => <option key={c.id} value={c.id}>{c.n} +{c.cc}</option>)}</select>
+                  <input className={inp} inputMode="tel" placeholder="WhatsApp number" value={rsForm.phone} onChange={(e) => setRsForm({ ...rsForm, phone: e.target.value })} />
+                </div>
+                <input className={inp} type="email" placeholder="Email (used to log in)" value={rsForm.email} onChange={(e) => setRsForm({ ...rsForm, email: e.target.value })} />
+                <input className={inp} placeholder="Password (min 6)" value={rsForm.password} onChange={(e) => setRsForm({ ...rsForm, password: e.target.value })} />
+                <div className="text-xs text-[var(--mut)]">{isAdmin ? 'The new reseller works directly under you.' : 'The new reseller joins your team (same as your invite link).'}</div>
+                {rsErr && <div className="text-sm font-semibold text-rose-500">{rsErr}</div>}
+                <button className={`${primary} w-full disabled:opacity-50`} disabled={rsBusy} onClick={createReseller}>{rsBusy ? 'Please wait…' : 'Create reseller'}</button>
+              </div>
+            )}
           </div>
         </div>
       )}
