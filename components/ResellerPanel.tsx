@@ -33,6 +33,7 @@ const primary = `${btn} bg-gradient-to-r from-indigo-500 to-violet-500 text-whit
 const ghost = `${btn} border border-[var(--line)] bg-[var(--card)] text-[var(--ink)] hover:bg-[var(--soft)]`;
 
 function waNumber(p: string) { const d = String(p).replace(/\D/g, ''); return d.startsWith('0') ? '880' + d.slice(1) : d; }
+function validWa(s: string) { return /^\+[1-9][0-9]{7,14}$/.test(String(s).replace(/[\s()-]/g, '')); }
 function copy(t: string) { try { navigator.clipboard?.writeText(t); } catch { /* ignore */ } }
 function fmtGb(a: OpenVpnAccount) {
   const used = a.usedMb >= 1024 ? `${(a.usedMb / 1024).toFixed(1)} GB` : `${a.usedMb} MB`;
@@ -67,6 +68,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [slip, setSlip] = useState<OpenVpnAccount | null>(null);
   const [resellers, setResellers] = useState<any[]>([]);
   const [form, setForm] = useState({ country: 'BD', phone: '', months: 1 });
+  const [trial, setTrial] = useState(false);
+  const [notices, setNotices] = useState<any[]>([]);
   const [renewFor, setRenewFor] = useState<OpenVpnAccount | null>(null);
   const [dnsLink, setDnsLink] = useState<{ username: string; url: string } | null>(null);
   const [renewMonths, setRenewMonths] = useState(1);
@@ -106,6 +109,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setCoupons(cp.data || []);
     const cr = await supabase.from('credit_requests').select('*').order('created_at', { ascending: false }).limit(100);
     setReqs(cr.data || []);
+    const nt = await supabase.rpc('pending_expiry_notices');
+    setNotices(nt.data || []);
     const st = await supabase.from('app_settings').select('key,value');
     const sm: Record<string, string> = {}; (st.data || []).forEach((x: any) => { sm[x.key] = x.value; });
     setPay({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: Number(sm.price_per_credit) || PER_CREDIT });
@@ -124,9 +129,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
 
   async function doAuth() {
     setMsg('');
-    if (auth.signup && auth.whatsapp.replace(/[^0-9]/g, '').length < 8) return setMsg('Enter your WhatsApp number with country code');
+    if (auth.signup && !validWa(auth.whatsapp)) return setMsg('Enter your WhatsApp number with country code, starting with + (example +966501234567)');
     const r = auth.signup
-      ? await supabase.auth.signUp({ email: auth.email, password: auth.password, options: { data: { name: auth.name, whatsapp: auth.whatsapp } } })
+      ? await supabase.auth.signUp({ email: auth.email, password: auth.password, options: { data: { name: auth.name, whatsapp: auth.whatsapp.replace(/[\s()-]/g, '') } } })
       : await supabase.auth.signInWithPassword({ email: auth.email, password: auth.password });
     if (r.error) return setMsg(r.error.message);
     if (auth.signup && !r.data.session) setMsg('Account created. Check your email to confirm, then log in.');
@@ -136,9 +141,11 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const local = form.phone.replace(/\D/g, '').replace(/^0+/, '');
     if (local.length < 6) return setErr('Enter the phone number');
     const full = (COUNTRIES.find((c) => c.id === form.country)?.cc || '880') + local;
-    const { data, error } = await supabase.rpc('create_customer', { p_phone: full, p_months: form.months, p_bw: 'Unlimited' });
+    const { data, error } = trial
+      ? await supabase.rpc('create_trial_customer', { p_phone: full })
+      : await supabase.rpc('create_customer', { p_phone: full, p_months: form.months, p_bw: 'Unlimited' });
     if (error) return setErr(error.message);
-    await load(); setModal(false); setForm({ country: form.country, phone: '', months: 1 });
+    await load(); setModal(false); setTrial(false); setForm({ country: form.country, phone: '', months: 1 });
     const lk = await supabase.rpc('generate_customer_link', { p_username: data.username });
     if (lk.error || !lk.data) { alert('Account created, but the link could not be made: ' + (lk.error?.message || 'unknown error') + '. Use the Customer link button in the Users list.'); return; }
     setDnsLink({ username: data.username, url: `${window.location.origin}/c/?t=${lk.data}` });
@@ -228,7 +235,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     if (error) alert(error.message); else { alert(`Added ${n} credits. Payable was ৳${payable}`); setTopup(0); setCoupon(''); setCouponPct(0); load(); }
   }
   async function saveProfile() {
-    const { error } = await supabase.from('profiles').update({ name: pName, whatsapp: pWa }).eq('id', user.id);
+    if (!validWa(pWa)) return alert('WhatsApp number must start with + and the country code (example +966501234567)');
+    const { error } = await supabase.from('profiles').update({ name: pName, whatsapp: pWa.replace(/[\s()-]/g, '') }).eq('id', user.id);
     if (error) alert(error.message); else { alert('Saved'); load(); }
   }
 
@@ -257,6 +265,20 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const Head = ({ t, s, children }: { t: string; s?: string; children?: any }) => (
     <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
       <div><h2 className="text-xl font-black text-[var(--ink)]">{t}</h2>{s && <p className="text-sm text-[var(--mut)]">{s}</p>}</div>{children}
+    </div>
+  );
+
+  const Reminders = () => notices.length === 0 ? null : (
+    <div className={`${card} p-5 mb-5`}>
+      <div className="flex items-center gap-2 mb-1"><MessageCircle className="h-5 w-5 text-emerald-500" /><h3 className="font-black text-[var(--ink)]">Expired customers ({notices.length})</h3></div>
+      <p className="text-sm text-[var(--mut)] mb-3">Send a renewal reminder on WhatsApp. A customer leaves this list once you send it.</p>
+      <div className="space-y-2">{notices.map((n: any) => (
+        <div key={`${n.account_id}-${n.expiry_marker}`} className="flex items-center justify-between gap-3 rounded-xl bg-[var(--soft)] px-3.5 py-2.5">
+          <div className="text-sm font-bold">{n.phone}</div>
+          <a className={`${primary} !py-1.5`} target="_blank" rel="noreferrer" href={`https://wa.me/${waNumber(n.phone)}?text=${encodeURIComponent(n.message)}`}
+            onClick={async () => { await supabase.rpc('mark_expiry_notice_sent', { p_account_id: n.account_id, p_expiry_marker: n.expiry_marker }); setTimeout(load, 800); }}>
+            <MessageCircle className="h-4 w-4" /> Send on WhatsApp</a>
+        </div>))}</div>
     </div>
   );
 
@@ -349,13 +371,14 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <Stat icon={Network} label="Total Resellers" value={resellers.length} tone="bg-violet-500" />
               <Stat icon={Wallet} label="Credits" value={credits} tone="bg-amber-500" />
             </div>
-            <div className="mt-8"><Head t="Recent Users" s="Latest subscribers"><button onClick={() => setTab('users')} className={ghost}>View all</button></Head><UsersTable rows={accounts.slice(0, 5)} compact /></div>
+            <div className="mt-8"><Reminders /><Head t="Recent Users" s="Latest subscribers"><button onClick={() => setTab('users')} className={ghost}>View all</button></Head><UsersTable rows={accounts.slice(0, 5)} compact /></div>
             <div className={`${card} p-5 mt-6 flex items-center gap-3`}><Server className="h-5 w-5 text-indigo-500" /><div className="text-sm"><b>Servers (Failover Pool)</b> <span className="text-[var(--mut)]">· real servers will be connected here</span></div></div>
           </>)}
 
           {tab === 'users' && (<>
             <Head t="Users" s="Customers by phone number"><button onClick={() => setModal(true)} className={primary}><UserPlus className="h-4 w-4" />Add User</button></Head>
             <div className="relative mb-4"><Search className="absolute left-3.5 top-3 h-4 w-4 text-[var(--mut)]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search phone number…" className={`${inp} pl-10`} /></div>
+            <Reminders />
             <UsersTable rows={list} />
           </>)}
 
@@ -438,8 +461,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
                 <select className={`${inp} !w-36 shrink-0`} value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })}>{COUNTRIES.map((c) => <option key={c.id} value={c.id}>{c.n} +{c.cc}</option>)}</select>
                 <input className={inp} inputMode="tel" placeholder="WhatsApp number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               </div>
-              <select className={inp} value={form.months} onChange={(e) => setForm({ ...form, months: Number(e.target.value) })}>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''}</option>)}</select>
-              <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">{isAdmin ? 'Admin account: no credits are used' : 'Credits used (1 credit = 1 month)'}</span><b className="text-lg">{isAdmin ? 0 : form.months}</b></div>
+              <select className={inp} value={trial ? 'trial' : form.months} onChange={(e) => { if (e.target.value === 'trial') setTrial(true); else { setTrial(false); setForm({ ...form, months: Number(e.target.value) }); } }}><option value="trial">Trial (1 hour)</option>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''}</option>)}</select>
+              <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">{isAdmin ? 'Admin account: no credits are used' : trial ? 'Trial: free, ends after 1 hour' : 'Credits used (1 credit = 1 month)'}</span><b className="text-lg">{isAdmin || trial ? 0 : form.months}</b></div>
               <div className="text-xs text-[var(--mut)]">One account per phone number. A private DNS link is made right after Create.</div>
               {err && <div className="text-sm font-semibold text-rose-500">{err}</div>}
               <button className={`${primary} w-full`} onClick={create}>Create & get link</button>
