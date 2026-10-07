@@ -365,14 +365,15 @@ export default function MaheHubEnterpriseSystem() {
     }
     if (acc) { setImportUserAccount(acc); setCurrentView('user_import'); }
     // live data from Supabase (no password is ever returned)
-    supabase.rpc('get_import_info', { p_username: name }).then(({ data }) => {
+    Promise.all([supabase.rpc('get_import_info', { p_username: name }), supabase.rpc('pool_hosts')]).then(([{ data }, pl]) => {
       const r: any = Array.isArray(data) ? data[0] : data;
       if (!r) return;
+      const pool: string[] = Array.isArray(pl.data) && pl.data.length ? (pl.data as string[]) : (r.server_host ? [r.server_host] : []);
       setImportUserAccount({
         id: 'LIVE-' + r.username, username: r.username, password: '', server: r.server_tier === 'VIP' ? 'VIP Brilliant' : 'Normal Dhaka',
         serverHost: r.server_host, days: r.days, bandwidthType: r.bandwidth_type, bandwidthGb: r.bandwidth_gb, usedMb: Number(r.used_mb),
         totalPriceBdt: 0, startDate: '', expiryDate: new Date(r.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase(),
-        status: r.status, importLink: window.location.href, multiServerFailover: ['103.145.118.24', '185.220.101.55', '45.148.12.80'],
+        status: r.status, importLink: window.location.href, multiServerFailover: pool,
       });
       setCurrentView('user_import');
     });
