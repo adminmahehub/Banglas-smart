@@ -249,6 +249,30 @@ export default function MaheHubEnterpriseSystem() {
   // Interactive Generator on Home Page
   const [homeGeneratorHost, setHomeGeneratorHost] = useState('user-8801968117.new2.mahehub.com');
   const [homeDownloaded, setHomeDownloaded] = useState(false);
+  const [homeLink, setHomeLink] = useState('');
+  const [homeInfo, setHomeInfo] = useState<{ found: boolean; valid?: boolean; hostname?: string; phone_hint?: string; expiry_date?: string; days_left?: number } | null>(null);
+  const [homeChecking, setHomeChecking] = useState(false);
+  const DNS_PORTAL = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ssaqdsqopxclkplstpzj.supabase.co') + '/functions/v1/dns-portal';
+  const homeToken = (() => {
+    const v = homeLink.trim();
+    if (!v) return '';
+    try { const u = new URL(v); return u.searchParams.get('t') || ''; } catch { /* not a URL */ }
+    const m = v.match(/[?&]t=([^&\s]+)/);
+    return m ? decodeURIComponent(m[1]) : (/^[A-Za-z0-9_-]{8,}$/.test(v) ? v : '');
+  })();
+  useEffect(() => {
+    setHomeInfo(null);
+    if (!homeToken) { setHomeChecking(false); return; }
+    setHomeChecking(true);
+    const h = setTimeout(() => {
+      fetch(`${DNS_PORTAL}?t=${encodeURIComponent(homeToken)}`)
+        .then((r) => (r.ok ? r.json() : { found: false }))
+        .then((d) => setHomeInfo(d))
+        .catch(() => setHomeInfo({ found: false }))
+        .finally(() => setHomeChecking(false));
+    }, 500);
+    return () => clearTimeout(h);
+  }, [homeToken]);
   const [activeSetupTab, setActiveSetupTab] = useState<'iphone' | 'android' | 'openvpn'>('iphone');
   const [resellerSalesSlider, setResellerSalesSlider] = useState<number>(50);
 
@@ -1384,7 +1408,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                 theme === 'dark' ? 'bg-[#141e3d] border-blue-900/40' : 'bg-slate-50 border-slate-200'
               }`}>
                 <label className={`block text-xs font-bold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
-                  Enter Your Private DNS Hostname:
+                  Paste your personal link (from your reseller):
                 </label>
 
                 <div className="relative">
@@ -1393,9 +1417,9 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                   </div>
                   <input
                     type="text"
-                    value={homeGeneratorHost}
-                    onChange={(e) => setHomeGeneratorHost(e.target.value)}
-                    placeholder="user-xyz.new2.mahehub.com"
+                    value={homeLink}
+                    onChange={(e) => setHomeLink(e.target.value)}
+                    placeholder="https://…/c/?t=…"
                     className={`w-full pl-10 pr-4 py-3 rounded-xl text-xs sm:text-sm font-mono focus:outline-none ${
                       theme === 'dark'
                         ? 'bg-[#0b1227] border border-slate-700 text-cyan-300 focus:border-cyan-400'
@@ -1404,22 +1428,39 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                   />
                 </div>
 
+                {!homeLink.trim() && (
+                  <p className={`text-[11px] leading-relaxed ${theme === 'dark' ? 'text-amber-300' : 'text-amber-700'}`}>
+                    Get your personal link from your reseller first. Without it your DNS cannot be activated, and the generic profile will not connect.
+                  </p>
+                )}
+                {homeLink.trim() && homeChecking && <p className="text-[11px] text-slate-400">Checking your link…</p>}
+                {homeLink.trim() && !homeChecking && homeInfo && !homeInfo.found && (
+                  <p className="text-[11px] text-rose-400">This link is not valid. Please ask your reseller for a new one.</p>
+                )}
+                {homeInfo?.found && (
+                  <div className={`rounded-xl px-3 py-2 text-[11px] ${homeInfo.valid ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                    Account •••• {homeInfo.phone_hint} · {homeInfo.valid ? `${homeInfo.days_left} day(s) left (expires ${homeInfo.expiry_date})` : 'not active, please contact your reseller to renew'}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                   <button
+                    disabled={!homeInfo?.found || !homeInfo?.valid}
                     onClick={() => {
-                      downloadAppleProfile(homeGeneratorHost, 'iPhone_User');
+                      window.location.href = `${DNS_PORTAL}?t=${encodeURIComponent(homeToken)}&download=profile`;
                       setHomeDownloaded(true);
                       setTimeout(() => setHomeDownloaded(false), 3000);
                     }}
-                    className="py-3 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
+                    className="py-3 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Download className="h-4 w-4" />
                     <span>{homeDownloaded ? 'ডাউনলোড শুরু হয়েছে!' : 'iOS Profile (.mobileconfig)'}</span>
                   </button>
 
                   <button
-                    onClick={() => copyText('dns.mahehub.com', 'home-host-copy')}
-                    className="py-3 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
+                    disabled={!homeInfo?.found || !homeInfo?.valid || !homeInfo?.hostname}
+                    onClick={() => copyText(homeInfo?.hostname || '', 'home-host-copy')}
+                    className="py-3 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {copiedKey === 'home-host-copy' ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
                     <span>{copiedKey === 'home-host-copy' ? 'Copied Hostname!' : 'Android Copy Host'}</span>
@@ -1435,6 +1476,18 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                 </div>
               </div>
 
+            </div>
+            <div className="max-w-xl mx-auto mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center space-y-2">
+              <div className="text-sm font-black text-emerald-400">Free Trial (1 hour)</div>
+              <p className="text-[11px] text-slate-400">Want to test first? Message us on WhatsApp and we will set up a free 1-hour trial for you.</p>
+              <a
+                href="https://wa.me/8801614082537?text=Hello%20MaheHub%2C%20I%20want%20a%20free%201-hour%20trial"
+                target="_blank" rel="noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all"
+              >
+                <MessageCircle className="h-4 w-4" />
+                <span>Request Free Trial on WhatsApp</span>
+              </a>
             </div>
           </section>
 

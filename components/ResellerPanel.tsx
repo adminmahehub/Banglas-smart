@@ -87,6 +87,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [reqCredits, setReqCredits] = useState<number>(10);
   const [trx, setTrx] = useState('');
   const [refCode, setRefCode] = useState('');
+  const [stats, setStats] = useState<any>(null);
+  const [team, setTeam] = useState<any[]>([]);
   const [refInfo, setRefInfo] = useState<{ code: string; direct_count: number; bonus_credits: number } | null>(null);
   const toAcc = (r: any): OpenVpnAccount => ({
     id: r.id, username: r.username, password: r.password, server: r.server_tier === 'VIP' ? 'VIP Brilliant' : 'Normal Dhaka',
@@ -111,6 +113,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setCoupons(cp.data || []);
     const cr = await supabase.from('credit_requests').select('*').order('created_at', { ascending: false }).limit(100);
     setReqs(cr.data || []);
+    if (me?.role === 'admin') { const ds = await supabase.rpc('admin_dashboard_stats'); setStats(ds.data || null); } else setStats(null);
+    const tm = await supabase.rpc('my_team');
+    setTeam(tm.data || []);
     const ri = await supabase.rpc('my_referral_info');
     setRefInfo(ri.data || null);
     const nt = await supabase.rpc('pending_expiry_notices');
@@ -380,6 +385,36 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <Stat icon={Network} label="Total Resellers" value={resellers.length} tone="bg-violet-500" />
               <Stat icon={Wallet} label="Credits" value={credits} tone="bg-amber-500" />
             </div>
+            {isAdmin && stats && (<>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                <Stat icon={Wallet} label="Total Sales (৳)" value={Number(stats.total_sales_bdt).toLocaleString()} tone="bg-emerald-500" />
+                <Stat icon={Wallet} label="This Month (৳)" value={Number(stats.month_sales_bdt).toLocaleString()} tone="bg-indigo-500" />
+                <Stat icon={Activity} label="Expiring in 7 days" value={stats.expiring_7d} tone="bg-amber-500" />
+                <Stat icon={Download} label="Pending Top-ups" value={stats.pending_topups} tone="bg-rose-500" />
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                <Stat icon={Users} label="Customers" value={stats.customers} tone="bg-violet-500" />
+                <Stat icon={Check} label="Active Customers" value={stats.active_customers} tone="bg-emerald-500" />
+                <Stat icon={Ban} label="Expired" value={stats.expired_customers} tone="bg-slate-500" />
+                <Stat icon={Wallet} label="Credits Sold" value={stats.total_credits_sold} tone="bg-amber-500" />
+              </div>
+              <div className={`${card} p-5 mt-6`}>
+                <div className="font-black mb-3">Sales by month (last 6 months)</div>
+                {(() => { const mx = Math.max(1, ...stats.monthly.map((m: any) => Number(m.sales_bdt))); return (
+                  <div className="flex items-end gap-3 h-36">{stats.monthly.map((m: any) => (
+                    <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full">
+                      <div className="text-[10px] text-[var(--mut)] mb-1">{Number(m.sales_bdt) ? Number(m.sales_bdt).toLocaleString() : ''}</div>
+                      <div className="w-full rounded-t-lg bg-gradient-to-t from-indigo-500 to-violet-400" style={{ height: `${Math.max(3, (Number(m.sales_bdt) / mx) * 100)}%` }} />
+                      <div className="text-[10px] mt-1 text-[var(--mut)]">{m.month}</div>
+                    </div>))}</div>); })()}
+              </div>
+              <div className={`${card} mt-6 overflow-x-auto`}>
+                <div className="px-5 pt-4 font-black">Sales by reseller</div>
+                <table className="w-full min-w-[560px] text-sm mt-2"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Reseller', 'Own sales ৳', 'Team sales ৳', 'Customers'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
+                  <tbody>{stats.per_reseller.map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{Number(r.own_sales_bdt).toLocaleString()}</td><td className="px-4 py-3">{Number(r.team_sales_bdt).toLocaleString()}</td><td className="px-4 py-3">{r.active_customers}/{r.customers}</td></tr>)}
+                    {stats.per_reseller.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-[var(--mut)]">No resellers yet</td></tr>}</tbody></table>
+              </div>
+            </>)}
             <div className="mt-8"><Reminders /><Head t="Recent Users" s="Latest subscribers"><button onClick={() => setTab('users')} className={ghost}>View all</button></Head><UsersTable rows={accounts.slice(0, 5)} compact /></div>
             <div className={`${card} p-5 mt-6 flex items-center gap-3`}><Server className="h-5 w-5 text-indigo-500" /><div className="text-sm"><b>Servers (Failover Pool)</b> <span className="text-[var(--mut)]">· real servers will be connected here</span></div></div>
           </>)}
@@ -392,10 +427,17 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           </>)}
 
           {tab === 'resellers' && (<>
-            <Head t="Resellers" s={isAdmin ? 'Registered reseller accounts' : 'Visible to admin only'} />
-            <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[560px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Credits', 'Joined', ''].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
-              <tbody>{[...(isAdmin && prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)' }] : []), ...resellers].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3">{isAdmin && <button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button>}</td></tr>)}
-                {resellers.length === 0 && <tr><td colSpan={5} className="px-4 py-10 text-center text-[var(--mut)]">No resellers</td></tr>}</tbody></table></div>
+            <Head t={isAdmin ? 'Resellers' : 'My Team'} s={isAdmin ? 'All reseller accounts, who invited them and their team sales' : 'Resellers who joined through your referral link'} />
+            {isAdmin ? (
+              <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[760px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Credits', 'Invited by', 'Team', 'Team sales ৳', 'Joined', ''].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
+                <tbody>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)', _me: true }] : []), ...((stats?.per_reseller || resellers) as any[])].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{r._me ? '-' : (r.upline_name || 'Admin')}</td><td className="px-4 py-3">{r._me ? '-' : `${r.direct_count ?? 0} direct · ${r.team_count ?? 0} total`}</td><td className="px-4 py-3">{r._me ? '-' : Number(r.team_sales_bdt ?? 0).toLocaleString()}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3"><button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button></td></tr>)}
+                  {resellers.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-[var(--mut)]">No resellers</td></tr>}</tbody></table></div>
+            ) : (<>
+              {refInfo?.code && <div className={`${card} p-4 mb-4 flex flex-wrap items-center gap-3 text-sm`}><Link2 className="h-4 w-4 text-indigo-500" /><span className="text-[var(--mut)]">Your invite link:</span><b className="break-all">{typeof window !== 'undefined' ? window.location.origin : ''}/?ref={refInfo.code}</b><button className={`${ghost} !py-1.5 ml-auto`} onClick={() => flash('ref2', `${window.location.origin}/?ref=${refInfo.code}`)}>{copied === 'ref2' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>}
+              <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[560px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Level', 'Credits bought', 'Customers', 'Joined'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
+                <tbody>{team.map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.level === 1 ? 'Direct' : `Level ${r.level}`}</td><td className="px-4 py-3">{r.credits_bought}</td><td className="px-4 py-3">{r.customers}</td><td className="px-4 py-3">{new Date(r.joined).toLocaleDateString()}</td></tr>)}
+                  {team.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-[var(--mut)]">No one has joined through your link yet</td></tr>}</tbody></table></div>
+            </>)}
           </>)}
 
           {tab === 'credit' && (<>
