@@ -86,6 +86,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [pay, setPay] = useState({ method: 'bKash', number: '', price: 200 });
   const [reqCredits, setReqCredits] = useState<number>(10);
   const [trx, setTrx] = useState('');
+  const [payEdit, setPayEdit] = useState({ method: '', number: '', price: '' });
   const [refCode, setRefCode] = useState('');
   const [stats, setStats] = useState<any>(null);
   const [team, setTeam] = useState<any[]>([]);
@@ -127,6 +128,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const st = await supabase.from('app_settings').select('key,value');
     const sm: Record<string, string> = {}; (st.data || []).forEach((x: any) => { sm[x.key] = x.value; });
     setPay({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: Number(sm.price_per_credit) || PER_CREDIT });
+    setPayEdit({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: String(Number(sm.price_per_credit) || PER_CREDIT) });
     setLog((a.data || []).map((x: any) => ({ t: new Date(x.created_at).toLocaleString(), m: x.message })));
   };
   useEffect(() => {
@@ -174,6 +176,13 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: pay.method });
     if (error) { alert(error.message); return; }
     alert('Request sent. Your credits will be added after the admin checks the payment.'); setTrx(''); load();
+  }
+  async function savePay() {
+    for (const [k, v] of [['pay_method', payEdit.method], ['pay_number', payEdit.number], ['price_per_credit', payEdit.price]] as const) {
+      const { error } = await supabase.rpc('admin_set_setting', { p_key: k, p_value: v });
+      if (error) { alert(error.message); return; }
+    }
+    alert('Payment details saved.'); load();
   }
   async function resolveReq(id: string, ok: boolean) {
     if (!confirm(ok ? 'Approve this request and add the credits?' : 'Reject this request?')) return;
@@ -479,6 +488,13 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               {reqs.length > 0 && <div className={`${card} divide-y divide-[var(--line)]`}>{reqs.map((r) => (
                 <div key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm"><span><b>{r.credits}</b> credits · ৳{Number(r.amount_bdt)} · <span className="text-xs text-[var(--mut)]">{r.trx_id}</span></span><span className={`text-xs font-bold ${r.status === 'approved' ? 'text-emerald-500' : r.status === 'rejected' ? 'text-rose-500' : 'text-amber-500'}`}>{r.status}</span></div>))}</div>}
             </div>) : (<>
+              <div className={`${card} p-5 mb-6 space-y-3`}>
+                <div className="font-black">Payment details shown to resellers</div>
+                <input className={inp} value={payEdit.method} onChange={(e) => setPayEdit({ ...payEdit, method: e.target.value })} placeholder="Method (bKash / Nagad)" />
+                <input className={inp} value={payEdit.number} onChange={(e) => setPayEdit({ ...payEdit, number: e.target.value })} placeholder="Payment number(s)" />
+                <input className={inp} inputMode="numeric" value={payEdit.price} onChange={(e) => setPayEdit({ ...payEdit, price: e.target.value.replace(/\D/g, '') })} placeholder="Price per credit (BDT)" />
+                <button type="button" className={`${primary} w-full`} onClick={savePay}>Save payment details</button>
+              </div>
               {reqs.some((r) => r.status === 'pending') && <div className={`${card} p-5 mb-6`}>
                 <div className="font-black mb-3">Payment requests</div>
                 {reqs.filter((r) => r.status === 'pending').map((r) => (
