@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Network, PlusCircle, Activity, KeyRound, UserCircle, LogOut, Search,
-  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle,
+  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil,
 } from 'lucide-react';
 import type { OpenVpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
@@ -94,17 +94,30 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [trx, setTrx] = useState('');
   const [payEdit, setPayEdit] = useState({ method: '', number: '', price: '' });
   const [refCode, setRefCode] = useState('');
+  const [inviter, setInviter] = useState('');
+  const [payAccounts, setPayAccounts] = useState<any[]>([]);
+  const [payPick, setPayPick] = useState('');
+  const [paForm, setPaForm] = useState({ id: '', method: 'bKash', kind: 'Personal', number: '' });
+  const [phoneFor, setPhoneFor] = useState<OpenVpnAccount | null>(null);
+  const [newPhone, setNewPhone] = useState('');
+  const [servers, setServers] = useState<any[]>([]);
+  const [srvStatus, setSrvStatus] = useState<any>(null);
+  const [srvBusy, setSrvBusy] = useState('');
+  const [inactive, setInactive] = useState<any[]>([]);
+  const [inactiveMonths, setInactiveMonths] = useState(6);
+  const [cleaning, setCleaning] = useState(false);
+  const [svForm, setSvForm] = useState({ name: '', host: '', tier: 'Normal', region: '' });
   const [stats, setStats] = useState<any>(null);
   const [team, setTeam] = useState<any[]>([]);
   const [live, setLive] = useState<Record<string, any>>({});
   const [refInfo, setRefInfo] = useState<{ code: string; direct_count: number; bonus_credits: number } | null>(null);
-  const toAcc = (r: any): OpenVpnAccount => ({
+  const toAcc = (r: any, pool: string[] = []): OpenVpnAccount => ({
     id: r.id, username: r.username, password: r.password, server: r.server_tier === 'VIP' ? 'VIP Brilliant' : 'Normal Dhaka',
     serverHost: r.server_host, days: r.days, bandwidthType: r.bandwidth_type, bandwidthGb: r.bandwidth_gb, usedMb: Number(r.used_mb),
     totalPriceBdt: Number(r.price_bdt), startDate: r.start_date,
     expiryDate: new Date(r.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase(),
     status: r.status, importLink: `${window.location.origin}/?view=user_import&user=${encodeURIComponent(r.username)}`,
-    multiServerFailover: ['103.145.118.24', '185.220.101.55', '45.148.12.80'],
+    multiServerFailover: pool.length ? pool : (r.server_host ? [r.server_host] : []),
   });
   const load = async () => {
     const [p, v, a] = await Promise.all([
@@ -116,7 +129,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const me = rows.find((x) => x.id === user?.id) || null;
     setProf(me); setPName(me?.name || ''); setPWa(me?.whatsapp || '');
     setResellers(me?.role === 'admin' ? rows.filter((x) => x.role === 'reseller') : []);
-    setAccounts((v.data || []).map(toAcc));
+    const pl = await supabase.rpc('pool_hosts');
+    const pool: string[] = Array.isArray(pl.data) ? (pl.data as string[]) : [];
+    setAccounts((v.data || []).map((r: any) => toAcc(r, pool)));
     const cp = await supabase.from('reseller_coupons').select('*').order('created_at', { ascending: false });
     setCoupons(cp.data || []);
     const cr = await supabase.from('credit_requests').select('*').order('created_at', { ascending: false }).limit(100);
@@ -135,6 +150,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const sm: Record<string, string> = {}; (st.data || []).forEach((x: any) => { sm[x.key] = x.value; });
     setPay({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: Number(sm.price_per_credit) || PER_CREDIT });
     setPayEdit({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: String(Number(sm.price_per_credit) || PER_CREDIT) });
+    const pa = await supabase.from('payment_accounts').select('*').order('created_at', { ascending: true });
+    setPayAccounts(pa.data || []);
+    if (me?.role === 'admin') { const sv = await supabase.from('servers').select('*').order('created_at', { ascending: true }); setServers(sv.data || []); loadServerStatus(); } else setServers([]);
     setLog((a.data || []).map((x: any) => ({ t: new Date(x.created_at).toLocaleString(), m: x.message })));
   };
   useEffect(() => {
@@ -147,6 +165,16 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     return () => sub.subscription.unsubscribe();
   }, []);
   useEffect(() => { if (user) load(); else { setProf(null); setAccounts([]); } }, [user]);
+  useEffect(() => { if (user && tab === 'users') loadInactive(inactiveMonths); }, [user, tab, inactiveMonths]);
+  useEffect(() => {
+    if (!isAdmin || tab !== 'dashboard') return;
+    const t = setInterval(loadServerStatus, 20000);
+    return () => clearInterval(t);
+  }, [isAdmin, tab]);
+  useEffect(() => {
+    if (!refCode) { setInviter(''); return; }
+    supabase.rpc('referral_inviter_name', { p_code: refCode }).then(({ data }) => setInviter(typeof data === 'string' ? data : ''));
+  }, [refCode]);
 
   const list = useMemo(() => accounts.filter((a) => a.username.toLowerCase().includes(q.toLowerCase())), [accounts, q]);
   const active = accounts.filter((a) => a.status === 'active').length;
@@ -179,7 +207,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const n = Math.floor(Number(reqCredits));
     if (!n || n < 10) { alert('Minimum package is 10 credits.'); return; }
     if (trx.trim().length < 6) { alert('Enter the Transaction ID (TrxID) of your payment.'); return; }
-    const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: pay.method, p_coupon: cpApplied?.code || null });
+    const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: (payAccounts.find((x) => x.id === payPick)?.method) || pay.method, p_coupon: cpApplied?.code || null });
     if (error) { alert(error.message); return; }
     alert('Request sent. Your credits will be added after the admin checks the payment.'); setTrx(''); setCpIn(''); setCpApplied(null); load();
   }
@@ -208,6 +236,43 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     }
     alert('Payment details saved.'); load();
   }
+  async function savePayAccount() {
+    if (!paForm.method.trim() || paForm.number.trim().length < 5) { alert('Enter the method and the account number.'); return; }
+    const { error } = await supabase.rpc('admin_save_payment_account', { p_id: paForm.id || null, p_method: paForm.method.trim(), p_kind: paForm.kind, p_number: paForm.number.trim(), p_active: true });
+    if (error) { alert(error.message); return; }
+    setPaForm({ id: '', method: paForm.method, kind: paForm.kind, number: '' }); load();
+  }
+  async function togglePayAccount(a: any) {
+    const { error } = await supabase.rpc('admin_save_payment_account', { p_id: a.id, p_method: a.method, p_kind: a.kind, p_number: a.number, p_active: !a.active });
+    if (error) alert(error.message); else load();
+  }
+  async function removePayAccount(id: string) {
+    if (!confirm('Delete this payment account?')) return;
+    const { error } = await supabase.rpc('admin_delete_payment_account', { p_id: id });
+    if (error) alert(error.message); else load();
+  }
+  async function savePhone() {
+    if (!phoneFor) return;
+    if (!validWa(newPhone)) { alert('Enter the number with + and the country code (example +966501234567)'); return; }
+    const { data, error } = await supabase.rpc('edit_customer_phone', { p_username: phoneFor.username, p_new_phone: newPhone });
+    if (error) { alert(error.message); return; }
+    alert('Phone number changed to ' + data + '. If you sent a customer link before, it still works.'); setPhoneFor(null); setNewPhone(''); load();
+  }
+  async function addServer() {
+    if (!svForm.name.trim() || !svForm.host.trim()) { alert('Enter the server name and host.'); return; }
+    const { error } = await supabase.from('servers').insert({ name: svForm.name.trim(), host: svForm.host.trim(), tier: svForm.tier, region: svForm.region.trim() });
+    if (error) { alert(error.message); return; }
+    setSvForm({ name: '', host: '', tier: 'Normal', region: '' }); load();
+  }
+  async function toggleServer(s: any) {
+    const { error } = await supabase.from('servers').update({ active: !s.active }).eq('id', s.id);
+    if (error) alert(error.message); else load();
+  }
+  async function removeServer(id: string) {
+    if (!confirm('Remove this server from the pool?')) return;
+    const { error } = await supabase.from('servers').delete().eq('id', id);
+    if (error) alert(error.message); else load();
+  }
   async function resolveReq(id: string, ok: boolean) {
     if (!confirm(ok ? 'Approve this request and add the credits?' : 'Reject this request?')) return;
     const { error } = await supabase.rpc('resolve_credit_request', { p_id: id, p_approve: ok });
@@ -218,6 +283,45 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const { data, error } = await supabase.rpc('generate_customer_link', { p_username: a.username });
     if (error || !data) { alert('Could not create the link: ' + (error?.message || 'unknown error')); return; }
     setDnsLink({ username: a.username, url: `${window.location.origin}/c/?t=${data}` });
+  }
+  async function loadServerStatus() {
+    const { data } = await supabase.rpc('admin_server_status');
+    setSrvStatus(data || null);
+  }
+  async function runServerAction(cmd: 'restart_dns' | 'reload_dns' | 'check_status') {
+    if (cmd === 'restart_dns' && !confirm('Restart the DNS service now? DNS will be down for a few seconds.')) return;
+    setSrvBusy(cmd);
+    const { error } = await supabase.rpc('admin_queue_server_command', { p_command: cmd });
+    if (error) { alert(error.message); setSrvBusy(''); return; }
+    // the server picks the command up within about a minute and reports back
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const { data } = await supabase.rpc('admin_server_status');
+      setSrvStatus(data || null);
+      const last = (data?.commands || []).find((c: any) => c.command === cmd);
+      if (last && (last.status === 'done' || last.status === 'failed')) break;
+    }
+    setSrvBusy('');
+  }
+  async function loadInactive(m = inactiveMonths) {
+    const { data } = await supabase.rpc('admin_inactive_accounts', { p_months: m });
+    setInactive(Array.isArray(data) ? data : []);
+  }
+  async function deleteInactive(rows: any[]) {
+    if (rows.length === 0) return;
+    if (!confirm(`Delete ${rows.length} account(s) that have been expired for ${inactiveMonths}+ months? This cannot be undone.`)) return;
+    setCleaning(true);
+    let ok = 0; const failed: string[] = [];
+    for (const r of rows) {
+      const rv = await supabase.functions.invoke('vpn-provision', { body: { username: r.username, action: 'revoke' } });
+      if (rv.error) { failed.push(r.username); continue; }
+      const { data: gone, error } = await supabase.from('vpn_accounts').delete().eq('id', r.id).select('id');
+      if (error || !gone || gone.length === 0) { failed.push(r.username); continue; }
+      ok++;
+    }
+    setCleaning(false);
+    alert(`Deleted: ${ok}${failed.length ? `\nCould not delete (${failed.length}): ${failed.slice(0, 10).join(', ')}` : ''}`);
+    await load(); loadInactive();
   }
   async function dnsAction(kind: 'clear' | 'unblock', username: string) {
     const { error } = await supabase.rpc(kind === 'clear' ? 'dns_clear_ip' : 'dns_unblock', { p_username: username });
@@ -372,6 +476,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <button title="Import link / slip" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Copy className="h-4 w-4" /></button>
               <button title="Download .ovpn" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
               <button title="Customer link (DNS)" onClick={() => makeLink(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
+              <button title="Edit phone number" onClick={() => { setPhoneFor(a); setNewPhone('+' + a.username); }} className={`${ghost} !p-2`}><Pencil className="h-4 w-4" /></button>
               <button title="Renew (choose months)" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
               <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
               <button title="Delete" onClick={() => del(a)} className={`${ghost} !p-2 text-rose-500`}><Trash2 className="h-4 w-4" /></button></div></td>}
@@ -387,7 +492,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     <div style={themeVars} className="min-h-screen grid place-items-center bg-[var(--bg)] p-4 text-[var(--ink)]">
       <div className={`${card} w-full max-w-sm p-7`}>
         <div className="mb-5 flex items-center gap-3"><div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div><div><div className="font-black">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">RESELLER LOGIN</div></div></div>
-        {auth.signup && refCode && <div className="mb-3 rounded-xl bg-[var(--soft)] px-3.5 py-2.5 text-xs text-[var(--mut)]">Invited by referral code <b className="text-[var(--ink)]">{refCode}</b></div>}
+        {auth.signup && refCode && <div className="mb-3 rounded-xl bg-[var(--soft)] px-3.5 py-2.5 text-xs text-[var(--mut)]">Invited by: <b className="text-[var(--ink)]">{inviter || 'a MaheHub reseller'}</b></div>}
         {auth.signup && <input className={`${inp} mb-3`} placeholder="Name" value={auth.name} onChange={(e) => setAuth({ ...auth, name: e.target.value })} />}
         {auth.signup && <input className={`${inp} mb-3`} inputMode="tel" placeholder="WhatsApp number with country code" value={auth.whatsapp} onChange={(e) => setAuth({ ...auth, whatsapp: e.target.value })} />}
         <input className={`${inp} mb-3`} type="email" placeholder="Email" value={auth.email} onChange={(e) => setAuth({ ...auth, email: e.target.value })} />
@@ -476,7 +581,48 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               </div>
             </>)}
             <div className="mt-8"><Reminders /><Head t="Recent Users" s="Latest subscribers"><button onClick={() => setTab('users')} className={ghost}>View all</button></Head><UsersTable rows={accounts.slice(0, 5)} compact /></div>
-            <div className={`${card} p-5 mt-6 flex items-center gap-3`}><Server className="h-5 w-5 text-indigo-500" /><div className="text-sm"><b>Servers (Failover Pool)</b> <span className="text-[var(--mut)]">· real servers will be connected here</span></div></div>
+            {isAdmin && <div className={`${card} p-5 mt-6 space-y-3`}>
+              <div className="flex items-center gap-2"><Server className="h-5 w-5 text-indigo-500" /><b className="text-sm">Servers (Failover Pool)</b></div>
+              {servers.length === 0 && <div className="text-sm text-[var(--mut)]">No servers added yet.</div>}
+              {servers.map((sv) => <div key={sv.id} className="flex items-center justify-between gap-2 border-t border-[var(--line)] pt-3 text-sm">
+                <span><b>{sv.name}</b> · {sv.host} · {sv.tier}{sv.region ? ' · ' + sv.region : ''} <span className={`text-xs font-bold ${sv.active ? 'text-emerald-500' : 'text-amber-500'}`}>{sv.active ? 'active' : 'off'}</span></span>
+                <span className="flex gap-1.5"><button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => toggleServer(sv)}>{sv.active ? 'Disable' : 'Enable'}</button><button type="button" className={`${ghost} !p-2 text-rose-500`} onClick={() => removeServer(sv.id)}><Trash2 className="h-4 w-4" /></button></span></div>)}
+              <div className="grid grid-cols-2 gap-2">
+                <input className={inp} placeholder="Name (Server 1)" value={svForm.name} onChange={(e) => setSvForm({ ...svForm, name: e.target.value })} />
+                <input className={inp} placeholder="Host / IP" value={svForm.host} onChange={(e) => setSvForm({ ...svForm, host: e.target.value })} />
+                <select className={inp} value={svForm.tier} onChange={(e) => setSvForm({ ...svForm, tier: e.target.value })}><option>Normal</option><option>VIP</option></select>
+                <input className={inp} placeholder="Region (optional)" value={svForm.region} onChange={(e) => setSvForm({ ...svForm, region: e.target.value })} />
+              </div>
+              <button type="button" className={`${primary} w-full`} onClick={addServer}>Add server</button>
+            </div>}
+            {isAdmin && (() => {
+              const st = srvStatus; const online = !!st?.online;
+              const cmdName: Record<string, string> = { restart_dns: 'Restart DNS', reload_dns: 'Reload DNS', check_status: 'Check status' };
+              const up = st?.uptime_s ? (st.uptime_s > 86400 ? `${Math.floor(st.uptime_s / 86400)} d` : `${Math.floor(st.uptime_s / 3600)} h`) : '-';
+              return (<div className={`${card} p-5 mt-6 space-y-3`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2"><Activity className="h-5 w-5 text-indigo-500" /><b className="text-sm">Server Quick Actions &amp; Health</b></div>
+                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${online ? 'bg-emerald-500/15 text-emerald-600' : 'bg-rose-500/15 text-rose-500'}`}>{online ? 'Server online' : 'No report yet'}</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="rounded-xl bg-[var(--soft)] px-3 py-2"><div className="text-[var(--mut)]">DNS service</div><b>{st?.dns_running == null ? '-' : st.dns_running ? 'Running' : 'Stopped'}</b></div>
+                  <div className="rounded-xl bg-[var(--soft)] px-3 py-2"><div className="text-[var(--mut)]">Load</div><b>{st?.load_avg ?? '-'}</b></div>
+                  <div className="rounded-xl bg-[var(--soft)] px-3 py-2"><div className="text-[var(--mut)]">Disk used</div><b>{st?.disk_used_pct != null ? st.disk_used_pct + '%' : '-'}</b></div>
+                  <div className="rounded-xl bg-[var(--soft)] px-3 py-2"><div className="text-[var(--mut)]">Uptime</div><b>{up}</b></div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button type="button" disabled={!!srvBusy} className={`${primary} disabled:opacity-60`} onClick={() => runServerAction('restart_dns')}><RefreshCw className="h-4 w-4" />{srvBusy === 'restart_dns' ? 'Waiting…' : 'Restart DNS'}</button>
+                  <button type="button" disabled={!!srvBusy} className={`${ghost} disabled:opacity-60`} onClick={() => runServerAction('reload_dns')}>{srvBusy === 'reload_dns' ? 'Waiting…' : 'Reload DNS'}</button>
+                  <button type="button" disabled={!!srvBusy} className={`${ghost} disabled:opacity-60`} onClick={() => runServerAction('check_status')}>{srvBusy === 'check_status' ? 'Waiting…' : 'Check status'}</button>
+                </div>
+                <div className="text-[11px] text-[var(--mut)]">Unblock IP and Reset Device Lock are in <b>Users</b> (per customer). Commands run within about a minute.</div>
+                {(st?.commands || []).slice(0, 4).map((c: any) => (
+                  <div key={c.id} className="flex items-center justify-between gap-2 border-t border-[var(--line)] pt-2 text-xs">
+                    <span><b>{cmdName[c.command] || c.command}</b> · {new Date(c.requested_at).toLocaleTimeString()}{c.result ? <span className="text-[var(--mut)]"> · {String(c.result).slice(0, 60)}</span> : null}</span>
+                    <span className={`rounded-full px-2 py-0.5 font-bold ${c.status === 'done' ? 'bg-emerald-500/15 text-emerald-600' : c.status === 'failed' ? 'bg-rose-500/15 text-rose-500' : 'bg-amber-500/15 text-amber-600'}`}>{c.status}</span>
+                  </div>))}
+              </div>);
+            })()}
           </>)}
 
           {tab === 'users' && (<>
@@ -484,6 +630,25 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             <div className="relative mb-4"><Search className="absolute left-3.5 top-3 h-4 w-4 text-[var(--mut)]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search phone number…" className={`${inp} pl-10`} /></div>
             <Reminders />
             <UsersTable rows={list} />
+            <div className={`${card} p-5 mt-6 space-y-3`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2"><Trash2 className="h-5 w-5 text-rose-500" /><b className="text-sm">Old inactive accounts</b></div>
+                <select className={`${inp} !w-auto`} value={inactiveMonths} onChange={(e) => setInactiveMonths(Number(e.target.value))}>
+                  {[3, 4, 5, 6, 9, 12].map((m) => <option key={m} value={m}>Expired {m}+ months</option>)}
+                </select>
+              </div>
+              {inactive.length === 0 ? <div className="text-sm text-[var(--mut)]">No accounts have been expired for {inactiveMonths}+ months.</div> : (<>
+                <div className="text-xs text-[var(--mut)]">{inactive.length} account(s) were not renewed. Deleting also frees the server (certificate is revoked).</div>
+                <div className="max-h-64 overflow-y-auto space-y-1">
+                  {inactive.map((r: any) => (
+                    <div key={r.id} className="flex items-center justify-between gap-2 border-t border-[var(--line)] py-2 text-sm">
+                      <span><b>{r.username}</b><span className="text-xs text-[var(--mut)]"> · expired {r.expiry_date}{isAdmin && r.owner_name ? ' · ' + r.owner_name : ''} · {r.months_inactive} mo</span></span>
+                      <button type="button" disabled={cleaning} className={`${ghost} !p-2 text-rose-500`} onClick={() => deleteInactive([r])}><Trash2 className="h-4 w-4" /></button>
+                    </div>))}
+                </div>
+                <button type="button" disabled={cleaning} className={`${primary} w-full disabled:opacity-60`} onClick={() => deleteInactive(inactive)}>{cleaning ? 'Deleting…' : `Delete all ${inactive.length}`}</button>
+              </>)}
+            </div>
           </>)}
 
           {tab === 'resellers' && (<>
@@ -512,22 +677,36 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
                 <div className="flex gap-2"><input value={cpIn} onChange={(e) => { setCpIn(e.target.value); setCpApplied(null); }} placeholder="Coupon code (optional)" className={inp} /><button type="button" className={ghost} onClick={checkCoupon}>Apply</button></div>
                 {cpApplied && <div className="text-xs font-bold text-emerald-500">Coupon {cpApplied.code}: {cpApplied.pct}% off applied</div>}
                 <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3"><span className="text-[var(--mut)]">Total price</span><b className="text-lg">৳{Math.round(Math.max(0, Math.floor(reqCredits || 0)) * pay.price * (100 - (cpApplied?.pct || 0)) / 100)}</b></div>
-                <div className="rounded-xl bg-[var(--soft)] px-4 py-3">
-                  <div className="text-xs text-[var(--mut)]">Send the payment by {pay.method} to</div>
-                  <div className="flex items-center gap-2"><b className="text-base break-all">{pay.number || 'Ask the admin for the payment number'}</b>{pay.number && <button type="button" className={`${ghost} !p-2`} onClick={() => flash('paynum', pay.number)}>{copied === 'paynum' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>}</div>
+                <div className="rounded-xl bg-[var(--soft)] px-4 py-3 space-y-2">
+                  <div className="text-xs text-[var(--mut)]">Choose where you sent the payment</div>
+                  {payAccounts.filter((x) => x.active).length === 0 && <div className="text-sm">Ask the admin for the payment number</div>}
+                  {payAccounts.filter((x) => x.active).map((x) => (
+                    <label key={x.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${payPick === x.id ? 'border-indigo-400' : 'border-[var(--line)]'}`}>
+                      <input type="radio" name="payacc" checked={payPick === x.id} onChange={() => setPayPick(x.id)} />
+                      <span className="flex-1 text-sm"><b>{x.method}</b> <span className="text-xs text-[var(--mut)]">({x.kind})</span><br /><span className="break-all">{x.number}</span></span>
+                      <button type="button" className={`${ghost} !p-2`} onClick={() => flash('pa' + x.id, x.number)}>{copied === 'pa' + x.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
+                    </label>))}
                 </div>
                 <input value={trx} onChange={(e) => setTrx(e.target.value)} className={inp} placeholder="Transaction ID (TrxID) after payment" />
-                <button type="button" disabled={!reqCredits || reqCredits < 10 || trx.trim().length < 6} className={`${primary} w-full disabled:opacity-50`} onClick={submitTopup}><Wallet className="h-4 w-4" />Submit payment</button>
+                <button type="button" disabled={!reqCredits || reqCredits < 10 || trx.trim().length < 6 || (payAccounts.some((x) => x.active) && !payPick)} className={`${primary} w-full disabled:opacity-50`} onClick={submitTopup}><Wallet className="h-4 w-4" />Submit payment</button>
               </div>
               {reqs.length > 0 && <div className={`${card} divide-y divide-[var(--line)]`}>{reqs.map((r) => (
                 <div key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm"><span><b>{r.credits}</b> credits · ৳{Number(r.amount_bdt)} · <span className="text-xs text-[var(--mut)]">{r.trx_id}</span></span><span className={`text-xs font-bold ${r.status === 'approved' ? 'text-emerald-500' : r.status === 'rejected' ? 'text-rose-500' : 'text-amber-500'}`}>{r.status}</span></div>))}</div>}
             </div>) : (<>
               <div className={`${card} p-5 mb-6 space-y-3`}>
-                <div className="font-black">Payment details shown to resellers</div>
-                <input className={inp} value={payEdit.method} onChange={(e) => setPayEdit({ ...payEdit, method: e.target.value })} placeholder="Method (bKash / Nagad)" />
-                <input className={inp} value={payEdit.number} onChange={(e) => setPayEdit({ ...payEdit, number: e.target.value })} placeholder="Payment number(s)" />
+                <div className="font-black">Payment accounts shown to resellers</div>
+                {payAccounts.map((x) => <div key={x.id} className="flex items-center justify-between gap-2 border-t border-[var(--line)] pt-3 text-sm">
+                  <span><b>{x.method}</b> ({x.kind}) · {x.number} <span className={`text-xs font-bold ${x.active ? 'text-emerald-500' : 'text-amber-500'}`}>{x.active ? 'active' : 'hidden'}</span></span>
+                  <span className="flex gap-1.5"><button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => setPaForm({ id: x.id, method: x.method, kind: x.kind, number: x.number })}>Edit</button><button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => togglePayAccount(x)}>{x.active ? 'Hide' : 'Show'}</button><button type="button" className={`${ghost} !p-2 text-rose-500`} onClick={() => removePayAccount(x.id)}><Trash2 className="h-4 w-4" /></button></span></div>)}
+                <div className="grid grid-cols-2 gap-2">
+                  <input className={inp} value={paForm.method} onChange={(e) => setPaForm({ ...paForm, method: e.target.value })} placeholder="Method (bKash / Nagad / Bank)" />
+                  <select className={inp} value={paForm.kind} onChange={(e) => setPaForm({ ...paForm, kind: e.target.value })}>{['Personal', 'Merchant', 'Agent', 'Bank'].map((k) => <option key={k}>{k}</option>)}</select>
+                </div>
+                <input className={inp} value={paForm.number} onChange={(e) => setPaForm({ ...paForm, number: e.target.value })} placeholder="Account number" />
+                <button type="button" className={`${primary} w-full`} onClick={savePayAccount}>{paForm.id ? 'Update account' : 'Add account'}</button>
+                <div className="text-xs font-bold text-[var(--mut)] pt-2">Credit rate</div>
                 <input className={inp} inputMode="numeric" value={payEdit.price} onChange={(e) => setPayEdit({ ...payEdit, price: e.target.value.replace(/\D/g, '') })} placeholder="Price per credit (BDT)" />
-                <button type="button" className={`${primary} w-full`} onClick={savePay}>Save payment details</button>
+                <button type="button" className={`${primary} w-full`} onClick={savePay}>Save credit rate</button>
               </div>
               {reqs.some((r) => r.status === 'pending') && <div className={`${card} p-5 mb-6`}>
                 <div className="font-black mb-3">Payment requests</div>
@@ -641,6 +820,17 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
                 <button className={`${primary} w-full disabled:opacity-50`} disabled={rsBusy} onClick={createReseller}>{rsBusy ? 'Please wait…' : 'Create reseller'}</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {phoneFor && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setPhoneFor(null)}>
+          <div className={`${card} w-full max-w-sm p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
+            <div className="flex items-center justify-between mb-3"><h3 className="text-lg font-black">Edit phone number</h3><button onClick={() => setPhoneFor(null)}><X className="h-5 w-5" /></button></div>
+            <div className="text-xs text-[var(--mut)] mb-3">Current: {phoneFor.username}. Use this if the number was typed wrong.</div>
+            <input className={`${inp} mb-4`} inputMode="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="+966501234567" />
+            <button className={`${primary} w-full`} onClick={savePhone}>Save</button>
           </div>
         </div>
       )}
