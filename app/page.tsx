@@ -295,6 +295,15 @@ export default function MaheHubEnterpriseSystem() {
   const [transactions, setTransactions] = useState<TransactionRecord[]>(INITIAL_TRANSACTIONS);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
+  // Referral link: ?ref=CODE opens the reseller sign-up screen
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const c = (new URLSearchParams(window.location.search).get('ref') || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
+    if (!c) return;
+    try { sessionStorage.setItem('mh_ref', c); } catch { /* ignore */ }
+    setCurrentView('login');
+  }, []);
+
   // Customer import link: ?view=user_import&user=NAME[&d=payload] opens the customer page directly
   useEffect(() => {
     if (typeof window === 'undefined') return;

@@ -86,6 +86,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [pay, setPay] = useState({ method: 'bKash', number: '', price: 200 });
   const [reqCredits, setReqCredits] = useState<number>(10);
   const [trx, setTrx] = useState('');
+  const [refCode, setRefCode] = useState('');
+  const [refInfo, setRefInfo] = useState<{ code: string; direct_count: number; bonus_credits: number } | null>(null);
   const toAcc = (r: any): OpenVpnAccount => ({
     id: r.id, username: r.username, password: r.password, server: r.server_tier === 'VIP' ? 'VIP Brilliant' : 'Normal Dhaka',
     serverHost: r.server_host, days: r.days, bandwidthType: r.bandwidth_type, bandwidthGb: r.bandwidth_gb, usedMb: Number(r.used_mb),
@@ -109,6 +111,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setCoupons(cp.data || []);
     const cr = await supabase.from('credit_requests').select('*').order('created_at', { ascending: false }).limit(100);
     setReqs(cr.data || []);
+    const ri = await supabase.rpc('my_referral_info');
+    setRefInfo(ri.data || null);
     const nt = await supabase.rpc('pending_expiry_notices');
     setNotices(nt.data || []);
     const st = await supabase.from('app_settings').select('key,value');
@@ -117,6 +121,10 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setLog((a.data || []).map((x: any) => ({ t: new Date(x.created_at).toLocaleString(), m: x.message })));
   };
   useEffect(() => {
+    try {
+      const c = (new URLSearchParams(window.location.search).get('ref') || sessionStorage.getItem('mh_ref') || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
+      if (c) { setRefCode(c); setAuth((a) => ({ ...a, signup: true })); }
+    } catch { /* ignore */ }
     supabase.auth.getSession().then(({ data }) => { setUser(data.session?.user ?? null); setReady(true); });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => setUser(sess?.user ?? null));
     return () => sub.subscription.unsubscribe();
@@ -131,7 +139,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setMsg('');
     if (auth.signup && !validWa(auth.whatsapp)) return setMsg('Enter your WhatsApp number with country code, starting with + (example +966501234567)');
     const r = auth.signup
-      ? await supabase.auth.signUp({ email: auth.email, password: auth.password, options: { data: { name: auth.name, whatsapp: auth.whatsapp.replace(/[\s()-]/g, '') } } })
+      ? await supabase.auth.signUp({ email: auth.email, password: auth.password, options: { data: { name: auth.name, whatsapp: auth.whatsapp.replace(/[\s()-]/g, ''), ...(refCode ? { ref: refCode } : {}) } } })
       : await supabase.auth.signInWithPassword({ email: auth.email, password: auth.password });
     if (r.error) return setMsg(r.error.message);
     if (auth.signup && !r.data.session) setMsg('Account created. Check your email to confirm, then log in.');
@@ -314,6 +322,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     <div style={themeVars} className="min-h-screen grid place-items-center bg-[var(--bg)] p-4 text-[var(--ink)]">
       <div className={`${card} w-full max-w-sm p-7`}>
         <div className="mb-5 flex items-center gap-3"><div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div><div><div className="font-black">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">RESELLER LOGIN</div></div></div>
+        {auth.signup && refCode && <div className="mb-3 rounded-xl bg-[var(--soft)] px-3.5 py-2.5 text-xs text-[var(--mut)]">Invited by referral code <b className="text-[var(--ink)]">{refCode}</b></div>}
         {auth.signup && <input className={`${inp} mb-3`} placeholder="Name" value={auth.name} onChange={(e) => setAuth({ ...auth, name: e.target.value })} />}
         {auth.signup && <input className={`${inp} mb-3`} inputMode="tel" placeholder="WhatsApp number with country code" value={auth.whatsapp} onChange={(e) => setAuth({ ...auth, whatsapp: e.target.value })} />}
         <input className={`${inp} mb-3`} type="email" placeholder="Email" value={auth.email} onChange={(e) => setAuth({ ...auth, email: e.target.value })} />
@@ -448,7 +457,22 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <div><label className="text-xs font-bold text-[var(--mut)]">Name</label><input value={pName} onChange={(e) => setPName(e.target.value)} className={inp} /></div>
               <div><label className="text-xs font-bold text-[var(--mut)]">WhatsApp</label><input value={pWa} onChange={(e) => setPWa(e.target.value)} placeholder="+880…" className={inp} /></div>
               <div className="text-xs text-[var(--mut)]">Role: <b>{prof?.role}</b></div>
-              <button className={primary} onClick={saveProfile}>Save</button></div></>)}
+              <button className={primary} onClick={saveProfile}>Save</button></div>
+            {refInfo?.code && (
+              <div className={`${card} p-6 max-w-lg mt-4 space-y-3`}>
+                <h3 className="font-black text-[var(--ink)]">Refer & earn</h3>
+                <div className="text-xs text-[var(--mut)]">Share your link. When a reseller you invite makes their first top-up of 20+ credits, you get 10% of it as free credits (20 → 2, 50 → 5, 100 → 10).</div>
+                <div className="flex items-center gap-2">
+                  <input readOnly className={inp} value={`${typeof window !== 'undefined' ? window.location.origin : ''}/?ref=${refInfo.code}`} />
+                  <button className={ghost} onClick={() => flash('ref', `${window.location.origin}/?ref=${refInfo.code}`)}>{copied === 'ref' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
+                </div>
+                <div className="flex gap-3 text-sm">
+                  <div className="flex-1 rounded-xl bg-[var(--soft)] px-4 py-3"><div className="text-[11px] text-[var(--mut)]">Code</div><b>{refInfo.code}</b></div>
+                  <div className="flex-1 rounded-xl bg-[var(--soft)] px-4 py-3"><div className="text-[11px] text-[var(--mut)]">Joined</div><b>{refInfo.direct_count}</b></div>
+                  <div className="flex-1 rounded-xl bg-[var(--soft)] px-4 py-3"><div className="text-[11px] text-[var(--mut)]">Bonus credits</div><b>{refInfo.bonus_credits}</b></div>
+                </div>
+              </div>
+            )}</>)}
         </div>
       </main>
 
