@@ -370,8 +370,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
 
   return (
     <div style={(dark ? DARK : LIGHT) as any} className="min-h-screen bg-[var(--bg)] text-[var(--ink)] flex">
-      {menu && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setMenu(false)} />}
-      <aside className={`fixed lg:sticky top-0 z-40 h-screen w-64 shrink-0 bg-[var(--card)] border-r border-[var(--line)] p-5 flex flex-col transition-transform ${menu ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      {menu && <div className="fixed inset-0 z-[55] bg-black/40 lg:hidden" onClick={() => setMenu(false)} />}
+      <aside className={`fixed lg:sticky top-0 z-[60] lg:z-40 h-[100dvh] lg:h-screen overflow-y-auto w-64 shrink-0 bg-[var(--card)] border-r border-[var(--line)] p-5 flex flex-col transition-transform ${menu ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="flex items-center gap-3 mb-8">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div>
           <div className="leading-tight"><div className="font-black tracking-tight">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">VPN PANEL</div></div>
