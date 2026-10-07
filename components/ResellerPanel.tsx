@@ -35,13 +35,6 @@ const ghost = `${btn} border border-[var(--line)] bg-[var(--card)] text-[var(--i
 function waNumber(p: string) { const d = String(p).replace(/\D/g, ''); return d.startsWith('0') ? '880' + d.slice(1) : d; }
 function validWa(s: string) { return /^\+[1-9][0-9]{7,14}$/.test(String(s).replace(/[\s()-]/g, '')); }
 function copy(t: string) { try { navigator.clipboard?.writeText(t); } catch { /* ignore */ } }
-function fmtGb(a: OpenVpnAccount) {
-  const used = a.usedMb >= 1024 ? `${(a.usedMb / 1024).toFixed(1)} GB` : `${a.usedMb} MB`;
-  return a.bandwidthType === 'Unlimited' ? `${used} / ∞` : `${used} / ${a.bandwidthGb} GB`;
-}
-function pct(a: OpenVpnAccount) {
-  return a.bandwidthType === 'Unlimited' ? 6 : Math.min(100, (a.usedMb / 1024 / Math.max(1, a.bandwidthGb)) * 100);
-}
 function profile(a: OpenVpnAccount) {
   const remotes = a.multiServerFailover.map((ip) => `remote ${ip} 1194`).join('\n');
   return `# DEMO PROFILE - real certificate/server details will be added after servers are connected\nclient\ndev tun\nproto udp\n${remotes}\nremote-random\nresolv-retry infinite\nnobind\npersist-key\npersist-tun\nverb 3\n# user: ${a.username}\n`;
@@ -462,12 +455,11 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     <div className={`${card} overflow-hidden`}>
       <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
         <thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">
-          {['Phone number', 'Bandwidth', 'Start date', 'Expire date', 'Status', 'Connection', ...(compact ? [] : ['Actions'])].map((h) => <th key={h} className="px-4 py-3 font-bold">{h}</th>)}
+          {['Phone number', 'Start date', 'Expire date', 'Status', 'Connection', ...(compact ? [] : ['Actions'])].map((h) => <th key={h} className="px-4 py-3 font-bold">{h}</th>)}
         </tr></thead>
         <tbody>{rows.map((a) => (
           <tr key={a.id} className="border-t border-[var(--line)] text-[var(--ink)]">
             <td className="px-4 py-3"><div className="font-bold">{a.username}</div></td>
-            <td className="px-4 py-3 text-xs font-semibold"><div className="h-1.5 w-24 rounded-full bg-[var(--line)] overflow-hidden mb-1"><div className="h-full rounded-full bg-violet-500" style={{ width: a.bandwidthType === 'Unlimited' ? '8%' : `${Math.min(100, (a.usedMb / (a.bandwidthGb * 1024)) * 100)}%` }} /></div>{(a.usedMb / 1024).toFixed(1)} GB / {a.bandwidthType === 'Unlimited' ? 'Unlimited' : `${a.bandwidthGb} GB`}</td>
             <td className="px-4 py-3 text-xs font-semibold">{a.startDate ? new Date(a.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</td>
             <td className="px-4 py-3 text-xs font-semibold">{a.expiryDate}</td>
             <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${a.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : a.status === 'suspended' ? 'bg-amber-500/15 text-amber-600' : 'bg-rose-500/15 text-rose-500'}`}>{a.status}</span></td>
@@ -481,7 +473,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
               <button title="Delete" onClick={() => del(a)} className={`${ghost} !p-2 text-rose-500`}><Trash2 className="h-4 w-4" /></button></div></td>}
           </tr>))}
-          {rows.length === 0 && <tr><td colSpan={5} className="px-4 py-10 text-center text-[var(--mut)]">No users found</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={compact ? 5 : 6} className="px-4 py-10 text-center text-[var(--mut)]">No users found</td></tr>}
         </tbody></table></div>
     </div>
   );
@@ -511,7 +503,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
       <aside className={`fixed lg:sticky top-0 z-[60] lg:z-40 h-[100dvh] lg:h-screen overflow-y-auto w-64 shrink-0 bg-[var(--card)] border-r border-[var(--line)] p-5 flex flex-col transition-transform ${menu ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="flex items-center gap-3 mb-8">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div>
-          <div className="leading-tight"><div className="font-black tracking-tight">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">VPN PANEL</div></div>
+          <div className="leading-tight"><div className="font-black tracking-tight">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">DNS PANEL</div></div>
           <button className="ml-auto lg:hidden" onClick={() => setMenu(false)}><X className="h-5 w-5" /></button>
         </div>
         <nav className="space-y-1 flex-1">{NAV.map(({ id, label, icon: I }) => (
@@ -841,7 +833,6 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             <div className="flex items-center justify-between mb-3"><h3 className="text-lg font-black">Renew {renewFor.username}</h3><button onClick={() => setRenewFor(null)}><X className="h-5 w-5" /></button></div>
             <div className="text-xs text-[var(--mut)] mb-3">Start: {renewFor.startDate || '-'} · Expires: {renewFor.expiryDate}</div>
             <select className={`${inp} mb-3`} value={renewMonths} onChange={(e) => setRenewMonths(Number(e.target.value))}>{[0, 1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m === 0 ? 'No extra months' : `${m} month${m > 1 ? 's' : ''}`}</option>)}</select>
-            {renewFor.bandwidthType === 'Limited' && <select className={`${inp} mb-3`} value={renewGb} onChange={(e) => setRenewGb(Number(e.target.value))}>{[0, 10, 30, 50, 100, 200, 500].map((g) => <option key={g} value={g}>{g === 0 ? 'No extra bandwidth' : `Add ${g} GB`}</option>)}</select>}
             <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm mb-4"><span className="text-[var(--mut)]">{isAdmin ? 'Admin: no credits used' : 'Credits deducted'}</span><b className="text-lg">{isAdmin ? 0 : renewMonths}</b></div>
             <button className={`${primary} w-full`} onClick={renew}>Renew</button>
           </div>
@@ -869,7 +860,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
       {slip && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setSlip(null)}>
           <div className={`${card} w-full max-w-md p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
-            <div className="flex items-center justify-between mb-1"><h3 className="text-lg font-black">Your VPN Account is Ready</h3><button onClick={() => setSlip(null)}><X className="h-5 w-5" /></button></div>
+            <div className="flex items-center justify-between mb-1"><h3 className="text-lg font-black">Your account is ready</h3><button onClick={() => setSlip(null)}><X className="h-5 w-5" /></button></div>
             <p className="text-sm text-[var(--mut)] mb-4">Send these details to the customer on WhatsApp</p>
             {([['Phone number', slip.username], ['Expires', slip.expiryDate], ['Import Link', slip.importLink]] as [string, string][]).map(([k, v]) => (
               <div key={k} className="mb-2 flex items-center gap-2 rounded-xl bg-[var(--soft)] px-3.5 py-2.5"><div className="min-w-0 flex-1"><div className="text-[10px] font-bold uppercase text-[var(--mut)]">{k}</div><div className="truncate text-sm font-semibold">{v}</div></div>
