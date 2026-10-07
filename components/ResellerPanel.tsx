@@ -380,7 +380,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     if (rv.error) {
       let detail = rv.error.message;
       try { const ctx = (rv.error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
-      alert('Could not revoke the certificate on the server, so the account was not deleted. Details: ' + detail); return;
+      if (!confirm('The VPN server could not revoke this account (' + detail + '). Delete the account from the panel anyway?')) return;
     }
     const { data: gone, error } = await supabase.from('vpn_accounts').delete().eq('id', a.id).select('id');
     if (error) { alert('Delete failed: ' + error.message); return; }
