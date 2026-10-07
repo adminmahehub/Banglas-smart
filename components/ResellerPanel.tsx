@@ -308,7 +308,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     else if (l.blocked) { t = 'Blocked'; c = 'bg-rose-500/15 text-rose-500'; }
     else if (!l.has_link) { t = 'No link sent'; }
     else if (!l.bound_ip) { t = 'Not activated yet'; c = 'bg-amber-500/15 text-amber-600'; }
-    else { t = `Activated${l.bound_at ? ' · ' + ago(l.bound_at) : ''}`; c = 'bg-emerald-500/15 text-emerald-600'; }
+    else if (l.last_seen && Date.now() - new Date(l.last_seen).getTime() < 5 * 60000) { t = 'Online now'; c = 'bg-emerald-500/15 text-emerald-600'; }
+    else if (l.last_seen) { t = `Last seen ${ago(l.last_seen)}`; c = 'bg-sky-500/15 text-sky-600'; }
+    else { t = `Activated${l.bound_at ? ' · ' + ago(l.bound_at) : ''}, not seen yet`; c = 'bg-amber-500/15 text-amber-600'; }
     return <div><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${c}`}>{t}</span>{l?.bound_ip && status === 'active' && <div className="mt-1 text-[10px] text-[var(--mut)] font-mono">{l.bound_ip}{l.trial ? ' · trial' : ''}</div>}</div>;
   };
   const UsersTable = ({ rows, compact }: { rows: OpenVpnAccount[]; compact?: boolean }) => (
