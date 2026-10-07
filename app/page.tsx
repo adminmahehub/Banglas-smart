@@ -250,6 +250,22 @@ export default function MaheHubEnterpriseSystem() {
   const [homeGeneratorHost, setHomeGeneratorHost] = useState('user-8801968117.new2.mahehub.com');
   const [homeDownloaded, setHomeDownloaded] = useState(false);
   const [homeLink, setHomeLink] = useState('');
+  const [trialName, setTrialName] = useState('');
+  const [trialPhone, setTrialPhone] = useState('');
+  const [trialBusy, setTrialBusy] = useState(false);
+  const [trialErr, setTrialErr] = useState('');
+  const [trialLink, setTrialLink] = useState('');
+  const submitFreeTrial = async () => {
+    setTrialErr('');
+    const ph = trialPhone.replace(/[\s()-]/g, '');
+    if (trialName.trim().length < 2) { setTrialErr('Please enter your name'); return; }
+    if (!/^\+[1-9][0-9]{7,14}$/.test(ph)) { setTrialErr('Enter your WhatsApp number with country code, starting with + (example +966501234567)'); return; }
+    setTrialBusy(true);
+    const { data, error } = await supabase.rpc('public_free_trial', { p_name: trialName.trim(), p_phone: ph });
+    setTrialBusy(false);
+    if (error || !data?.token) { setTrialErr(error?.message || 'Could not create the trial. Please try again.'); return; }
+    setTrialLink(`${window.location.origin}/c/?t=${data.token}`);
+  };
   const [homeInfo, setHomeInfo] = useState<{ found: boolean; valid?: boolean; hostname?: string; phone_hint?: string; expiry_date?: string; days_left?: number } | null>(null);
   const [homeChecking, setHomeChecking] = useState(false);
   const DNS_PORTAL = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ssaqdsqopxclkplstpzj.supabase.co') + '/functions/v1/dns-portal';
@@ -1477,17 +1493,51 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
               </div>
 
             </div>
-            <div className="max-w-xl mx-auto mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center space-y-2">
-              <div className="text-sm font-black text-emerald-400">Free Trial (1 hour)</div>
-              <p className="text-[11px] text-slate-400">Want to test first? Message us on WhatsApp and we will set up a free 1-hour trial for you.</p>
-              <a
-                href="https://wa.me/8801614082537?text=Hello%20MaheHub%2C%20I%20want%20a%20free%201-hour%20trial"
-                target="_blank" rel="noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all"
-              >
-                <MessageCircle className="h-4 w-4" />
-                <span>Request Free Trial on WhatsApp</span>
-              </a>
+            <div id="free-trial" className="max-w-xl mx-auto mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 space-y-3">
+              <div className="text-center">
+                <div className="text-base font-black text-emerald-400">Free Trial (1 hour)</div>
+                <p className="text-[11px] text-slate-400 mt-1">Test our service first. No payment, no package needed.</p>
+              </div>
+
+              {!trialLink ? (
+                <>
+                  <input
+                    type="text" value={trialName} onChange={(e) => setTrialName(e.target.value)} placeholder="Your name"
+                    className={`w-full px-4 py-3 rounded-xl text-sm focus:outline-none ${theme === 'dark' ? 'bg-[#0b1227] border border-slate-700 text-white focus:border-emerald-400' : 'bg-white border border-slate-300 text-slate-900 focus:border-emerald-500'}`}
+                  />
+                  <input
+                    type="tel" inputMode="tel" value={trialPhone} onChange={(e) => setTrialPhone(e.target.value)} placeholder="WhatsApp number with country code (+966…)"
+                    className={`w-full px-4 py-3 rounded-xl text-sm font-mono focus:outline-none ${theme === 'dark' ? 'bg-[#0b1227] border border-slate-700 text-white focus:border-emerald-400' : 'bg-white border border-slate-300 text-slate-900 focus:border-emerald-500'}`}
+                  />
+                  {trialErr && <p className="text-xs font-semibold text-rose-400">{trialErr}</p>}
+                  <button
+                    onClick={submitFreeTrial} disabled={trialBusy}
+                    className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm transition-all disabled:opacity-50"
+                  >
+                    {trialBusy ? 'Please wait…' : 'Get my free trial'}
+                  </button>
+                  <p className="text-center text-[11px] text-slate-400">
+                    Having trouble?{' '}
+                    <a className="text-emerald-400 underline" target="_blank" rel="noreferrer" href="https://wa.me/8801614082537?text=Hello%20MaheHub%2C%20I%20want%20a%20free%201-hour%20trial">Ask on WhatsApp</a>
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-emerald-500/15 px-4 py-3 text-sm font-bold text-emerald-300">Your free trial is ready. It works for 1 hour.</div>
+                  <a href={trialLink} className="block w-full text-center py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm">Open my setup page</a>
+                  <button onClick={() => copyText(trialLink, 'trial-link-copy')} className="w-full py-2.5 rounded-xl border border-emerald-500/40 text-emerald-300 font-bold text-xs">
+                    {copiedKey === 'trial-link-copy' ? 'Link copied!' : 'Copy my personal link (save it)'}
+                  </button>
+                </div>
+              )}
+
+              <div className={`rounded-xl p-3 text-[11px] leading-relaxed space-y-1 ${theme === 'dark' ? 'bg-black/20 text-slate-300' : 'bg-white/70 text-slate-700'}`}>
+                <div className="font-black">How to connect</div>
+                <div><b>iPhone:</b> open your setup page in Safari → Download Profile → Settings → “Profile Downloaded” → Install.</div>
+                <div><b>Android:</b> Copy DNS Hostname → Settings → Network &amp; internet → Private DNS → paste the hostname and save.</div>
+                <div>Then press <b>“Activate my IP”</b> once on the network you will use.</div>
+                <div className="pt-1 text-amber-400 font-bold">Warning: the trial stops automatically after 1 hour. To keep using it, take a monthly package from your reseller or admin. / ট্রায়াল ১ ঘণ্টা পর নিজে থেকে বন্ধ হয়ে যাবে। চালিয়ে যেতে রিসেলার বা অ্যাডমিনের কাছ থেকে মাসিক প্যাকেজ নিন।</div>
+              </div>
             </div>
           </section>
 

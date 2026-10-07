@@ -89,6 +89,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [refCode, setRefCode] = useState('');
   const [stats, setStats] = useState<any>(null);
   const [team, setTeam] = useState<any[]>([]);
+  const [live, setLive] = useState<Record<string, any>>({});
   const [refInfo, setRefInfo] = useState<{ code: string; direct_count: number; bonus_credits: number } | null>(null);
   const toAcc = (r: any): OpenVpnAccount => ({
     id: r.id, username: r.username, password: r.password, server: r.server_tier === 'VIP' ? 'VIP Brilliant' : 'Normal Dhaka',
@@ -114,6 +115,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const cr = await supabase.from('credit_requests').select('*').order('created_at', { ascending: false }).limit(100);
     setReqs(cr.data || []);
     if (me?.role === 'admin') { const ds = await supabase.rpc('admin_dashboard_stats'); setStats(ds.data || null); } else setStats(null);
+    const lv = await supabase.rpc('customer_live_status');
+    const lm: Record<string, any> = {}; ((lv.data as any[]) || []).forEach((x: any) => { lm[x.username] = x; });
+    setLive(lm);
     const tm = await supabase.rpc('my_team');
     setTeam(tm.data || []);
     const ri = await supabase.rpc('my_referral_info');
@@ -295,11 +299,23 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     </div>
   );
 
+  const connBadge = (u: string, status: string) => {
+    const l = live[u];
+    const ago = (t: string) => { const m = Math.max(0, Math.round((Date.now() - new Date(t).getTime()) / 60000)); return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
+    let t = '-', c = 'bg-slate-500/15 text-slate-500';
+    if (!l) return <span className="text-xs text-[var(--mut)]">-</span>;
+    if (status !== 'active') { t = 'Expired / off'; c = 'bg-rose-500/15 text-rose-500'; }
+    else if (l.blocked) { t = 'Blocked'; c = 'bg-rose-500/15 text-rose-500'; }
+    else if (!l.has_link) { t = 'No link sent'; }
+    else if (!l.bound_ip) { t = 'Not activated yet'; c = 'bg-amber-500/15 text-amber-600'; }
+    else { t = `Activated${l.bound_at ? ' · ' + ago(l.bound_at) : ''}`; c = 'bg-emerald-500/15 text-emerald-600'; }
+    return <div><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${c}`}>{t}</span>{l?.bound_ip && status === 'active' && <div className="mt-1 text-[10px] text-[var(--mut)] font-mono">{l.bound_ip}{l.trial ? ' · trial' : ''}</div>}</div>;
+  };
   const UsersTable = ({ rows, compact }: { rows: OpenVpnAccount[]; compact?: boolean }) => (
     <div className={`${card} overflow-hidden`}>
       <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
         <thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">
-          {['Phone number', 'Bandwidth', 'Start date', 'Expire date', 'Status', ...(compact ? [] : ['Actions'])].map((h) => <th key={h} className="px-4 py-3 font-bold">{h}</th>)}
+          {['Phone number', 'Bandwidth', 'Start date', 'Expire date', 'Status', 'Connection', ...(compact ? [] : ['Actions'])].map((h) => <th key={h} className="px-4 py-3 font-bold">{h}</th>)}
         </tr></thead>
         <tbody>{rows.map((a) => (
           <tr key={a.id} className="border-t border-[var(--line)] text-[var(--ink)]">
@@ -308,6 +324,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             <td className="px-4 py-3 text-xs font-semibold">{a.startDate ? new Date(a.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</td>
             <td className="px-4 py-3 text-xs font-semibold">{a.expiryDate}</td>
             <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${a.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : a.status === 'suspended' ? 'bg-amber-500/15 text-amber-600' : 'bg-rose-500/15 text-rose-500'}`}>{a.status}</span></td>
+            <td className="px-4 py-3">{connBadge(a.username, a.status)}</td>
             {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
               <button title="Import link / slip" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Copy className="h-4 w-4" /></button>
               <button title="Download .ovpn" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
