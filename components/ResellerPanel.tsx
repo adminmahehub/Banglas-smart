@@ -87,6 +87,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [reqCredits, setReqCredits] = useState<number>(10);
   const [trx, setTrx] = useState('');
   const [refCode, setRefCode] = useState('');
+  const [payEdit, setPayEdit] = useState({ method: '', number: '', price: '' });
   const [stats, setStats] = useState<any>(null);
   const [team, setTeam] = useState<any[]>([]);
   const [live, setLive] = useState<Record<string, any>>({});
@@ -127,6 +128,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const st = await supabase.from('app_settings').select('key,value');
     const sm: Record<string, string> = {}; (st.data || []).forEach((x: any) => { sm[x.key] = x.value; });
     setPay({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: Number(sm.price_per_credit) || PER_CREDIT });
+    setPayEdit({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: String(Number(sm.price_per_credit) || PER_CREDIT) });
     setLog((a.data || []).map((x: any) => ({ t: new Date(x.created_at).toLocaleString(), m: x.message })));
   };
   useEffect(() => {
@@ -166,6 +168,11 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const lk = await supabase.rpc('generate_customer_link', { p_username: data.username });
     if (lk.error || !lk.data) { alert('Account created, but the link could not be made: ' + (lk.error?.message || 'unknown error') + '. Use the Customer link button in the Users list.'); return; }
     setDnsLink({ username: data.username, url: `${window.location.origin}/c/?t=${lk.data}` });
+  }
+  async function savePayment() {
+    const { error } = await supabase.rpc('admin_set_payment', { p_method: payEdit.method, p_number: payEdit.number, p_price: Number(payEdit.price) });
+    if (error) { alert(error.message); return; }
+    alert('Payment details saved. Resellers will see the new number.'); load();
   }
   async function submitTopup() {
     const n = Math.floor(Number(reqCredits));
@@ -461,6 +468,15 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
 
           {tab === 'credit' && (<>
             <Head t="Add Credit" s={isAdmin ? 'Add credit to a reseller balance' : 'Buy credits and send the TrxID'} />
+            {isAdmin && (
+              <div className={`${card} p-6 text-sm space-y-3 mb-4`}>
+                <div className="font-black">Payment details (shown to resellers when they buy credits)</div>
+                <div><label className="text-xs font-bold text-[var(--mut)]">Method (example: bKash / Nagad)</label><input className={inp} value={payEdit.method} onChange={(e) => setPayEdit({ ...payEdit, method: e.target.value })} /></div>
+                <div><label className="text-xs font-bold text-[var(--mut)]">Payment number(s)</label><input className={inp} value={payEdit.number} onChange={(e) => setPayEdit({ ...payEdit, number: e.target.value })} placeholder="01XXXXXXXXX (bKash personal)" /></div>
+                <div><label className="text-xs font-bold text-[var(--mut)]">Price per credit (৳)</label><input className={inp} type="number" inputMode="numeric" value={payEdit.price} onChange={(e) => setPayEdit({ ...payEdit, price: e.target.value })} /></div>
+                <button className={primary} onClick={savePayment}>Save payment details</button>
+              </div>
+            )}
             {!isAdmin ? (<div className="space-y-4">
               <div className={`${card} p-6 text-sm space-y-3`}>
                 <div>Your credits: <b>{credits}</b> (1 credit = 1 month)</div>

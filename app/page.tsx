@@ -257,9 +257,9 @@ export default function MaheHubEnterpriseSystem() {
   const [trialLink, setTrialLink] = useState('');
   const submitFreeTrial = async () => {
     setTrialErr('');
-    const ph = trialPhone.replace(/[\s()-]/g, '');
+    const ph = trialPhone.replace(/[\s()+-]/g, '');
     if (trialName.trim().length < 2) { setTrialErr('Please enter your name'); return; }
-    if (!/^\+[1-9][0-9]{7,14}$/.test(ph)) { setTrialErr('Enter your WhatsApp number with country code, starting with + (example +966501234567)'); return; }
+    if (!/^[1-9][0-9]{7,14}$/.test(ph)) { setTrialErr('Enter country code and number together, without +. Example: 966501234567 (Saudi), 8801712345678 (Bangladesh), 923001234567 (Pakistan)'); return; }
     setTrialBusy(true);
     const { data, error } = await supabase.rpc('public_free_trial', { p_name: trialName.trim(), p_phone: ph });
     setTrialBusy(false);
@@ -1506,7 +1506,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                     className={`w-full px-4 py-3 rounded-xl text-sm focus:outline-none ${theme === 'dark' ? 'bg-[#0b1227] border border-slate-700 text-white focus:border-emerald-400' : 'bg-white border border-slate-300 text-slate-900 focus:border-emerald-500'}`}
                   />
                   <input
-                    type="tel" inputMode="tel" value={trialPhone} onChange={(e) => setTrialPhone(e.target.value)} placeholder="WhatsApp number with country code (+966…)"
+                    type="tel" inputMode="tel" value={trialPhone} onChange={(e) => setTrialPhone(e.target.value)} placeholder="Country code + number, no + (966501234567)"
                     className={`w-full px-4 py-3 rounded-xl text-sm font-mono focus:outline-none ${theme === 'dark' ? 'bg-[#0b1227] border border-slate-700 text-white focus:border-emerald-400' : 'bg-white border border-slate-300 text-slate-900 focus:border-emerald-500'}`}
                   />
                   {trialErr && <p className="text-xs font-semibold text-rose-400">{trialErr}</p>}
