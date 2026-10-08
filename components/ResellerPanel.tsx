@@ -34,6 +34,18 @@ const ghost = `${btn} border border-[var(--line)] bg-[var(--card)] text-[var(--i
 
 function waNumber(p: string) { const d = String(p).replace(/\D/g, ''); return d.startsWith('0') ? '880' + d.slice(1) : d; }
 function validWa(s: string) { return /^\+[1-9][0-9]{7,14}$/.test(String(s).replace(/[\s()-]/g, '')); }
+async function shrinkImage(file: File): Promise<Blob> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img: HTMLImageElement = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Could not read the image')); i.src = url; });
+    const k = Math.min(1, 1400 / Math.max(img.width, img.height));
+    const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+    cv.getContext('2d')!.drawImage(img, 0, 0, cv.width, cv.height);
+    const blob: Blob | null = await new Promise((res) => cv.toBlob(res, 'image/jpeg', 0.82));
+    if (!blob) throw new Error('Could not process the image');
+    return blob;
+  } finally { URL.revokeObjectURL(url); }
+}
 function copy(t: string) { try { navigator.clipboard?.writeText(t); } catch { /* ignore */ } }
 function profile(a: OpenVpnAccount) {
   const remotes = a.multiServerFailover.map((ip) => `remote ${ip} 1194`).join('\n');
@@ -85,6 +97,10 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [pay, setPay] = useState({ method: 'bKash', number: '', price: 200 });
   const [reqCredits, setReqCredits] = useState<number>(10);
   const [trx, setTrx] = useState('');
+  const [topStep, setTopStep] = useState<'amount' | 'method' | 'pay'>('amount');
+  const [senderNo, setSenderNo] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [topBusy, setTopBusy] = useState(false);
   const [payEdit, setPayEdit] = useState({ method: '', number: '', price: '' });
   const [refCode, setRefCode] = useState('');
   const [inviter, setInviter] = useState('');
@@ -198,11 +214,29 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   }
   async function submitTopup() {
     const n = Math.floor(Number(reqCredits));
+    const acct = payAccounts.find((x) => x.id === payPick);
+    const sn = senderNo.replace(/\D/g, '');
     if (!n || n < 10) { alert('Minimum package is 10 credits.'); return; }
+    if (sn.length < 6) { alert('Enter the number you paid from.'); return; }
     if (trx.trim().length < 6) { alert('Enter the Transaction ID (TrxID) of your payment.'); return; }
-    const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: (payAccounts.find((x) => x.id === payPick)?.method) || pay.method, p_coupon: cpApplied?.code || null });
-    if (error) { alert(error.message); return; }
-    alert('Request sent. Your credits will be added after the admin checks the payment.'); setTrx(''); setCpIn(''); setCpApplied(null); load();
+    if (!proofFile) { alert('Upload the payment screenshot.'); return; }
+    if (!user?.id) { alert('Please log in again.'); return; }
+    setTopBusy(true);
+    try {
+      const blob = await shrinkImage(proofFile);
+      const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+      const up = await supabase.storage.from('payment-proofs').upload(path, blob, { contentType: 'image/jpeg' });
+      if (up.error) { alert('Screenshot upload failed: ' + up.error.message); return; }
+      const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: acct ? `${acct.method} (${acct.kind})` : pay.method, p_coupon: cpApplied?.code || null, p_sender: sn, p_proof: path });
+      if (error) { alert(error.message); return; }
+      alert('Submitted. Your credits will be added after the admin verifies the payment.');
+      setTrx(''); setSenderNo(''); setProofFile(null); setCpIn(''); setCpApplied(null); setTopStep('amount'); load();
+    } catch (e: any) { alert(e?.message || 'Something went wrong'); } finally { setTopBusy(false); }
+  }
+  async function viewProof(path: string) {
+    const { data, error } = await supabase.storage.from('payment-proofs').createSignedUrl(path, 300);
+    if (error || !data?.signedUrl) { alert(error?.message || 'Could not open the screenshot'); return; }
+    window.open(data.signedUrl, '_blank');
   }
   async function createReseller() {
     setRsErr('');
@@ -660,30 +694,58 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           {tab === 'credit' && (<>
             <Head t="Add Credit" s={isAdmin ? 'Add credit to a reseller balance' : 'Buy credits and send the TrxID'} />
             {!isAdmin ? (<div className="space-y-4">
-              <div className={`${card} p-6 text-sm space-y-3`}>
+              <div className={`${card} p-6 text-sm space-y-4`}>
                 <div>Your credits: <b>{credits}</b> (1 credit = 1 month)</div>
-                <div className="text-xs font-bold text-[var(--mut)]">Choose credits (minimum 10)</div>
-                <div className="flex flex-wrap gap-2">{[10, 20, 30, 50].map((v) => (
-                  <button key={v} type="button" onClick={() => setReqCredits(v)} className={`${reqCredits === v ? primary : ghost} !px-4 !py-1.5 text-xs`}>{v}</button>))}</div>
-                <input type="number" inputMode="numeric" min={10} value={reqCredits || ''} onChange={(e) => setReqCredits(Number(e.target.value))} className={inp} placeholder="Or type credits" />
-                <div className="flex gap-2"><input value={cpIn} onChange={(e) => { setCpIn(e.target.value); setCpApplied(null); }} placeholder="Coupon code (optional)" className={inp} /><button type="button" className={ghost} onClick={checkCoupon}>Apply</button></div>
-                {cpApplied && <div className="text-xs font-bold text-emerald-500">Coupon {cpApplied.code}: {cpApplied.pct}% off applied</div>}
-                <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3"><span className="text-[var(--mut)]">Total price</span><b className="text-lg">৳{Math.round(Math.max(0, Math.floor(reqCredits || 0)) * pay.price * (100 - (cpApplied?.pct || 0)) / 100)}</b></div>
-                <div className="rounded-xl bg-[var(--soft)] px-4 py-3 space-y-2">
-                  <div className="text-xs text-[var(--mut)]">Choose where you sent the payment</div>
-                  {payAccounts.filter((x) => x.active).length === 0 && <div className="text-sm">Ask the admin for the payment number</div>}
-                  {payAccounts.filter((x) => x.active).map((x) => (
-                    <label key={x.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${payPick === x.id ? 'border-indigo-400' : 'border-[var(--line)]'}`}>
-                      <input type="radio" name="payacc" checked={payPick === x.id} onChange={() => setPayPick(x.id)} />
-                      <span className="flex-1 text-sm"><b>{x.method}</b> <span className="text-xs text-[var(--mut)]">({x.kind})</span><br /><span className="break-all">{x.number}</span></span>
-                      <button type="button" className={`${ghost} !p-2`} onClick={() => flash('pa' + x.id, x.number)}>{copied === 'pa' + x.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
-                    </label>))}
-                </div>
-                <input value={trx} onChange={(e) => setTrx(e.target.value)} className={inp} placeholder="Transaction ID (TrxID) after payment" />
-                <button type="button" disabled={!reqCredits || reqCredits < 10 || trx.trim().length < 6 || (payAccounts.some((x) => x.active) && !payPick)} className={`${primary} w-full disabled:opacity-50`} onClick={submitTopup}><Wallet className="h-4 w-4" />Submit payment</button>
+                {topStep === 'amount' && <>
+                  <div className="font-black text-base">Choose amount</div>
+                  <div className="grid grid-cols-3 gap-2">{[10, 20, 30, 50, 100].map((v) => (
+                    <button key={v} type="button" onClick={() => setReqCredits(v)} className={`rounded-xl border px-2 py-2 text-center ${reqCredits === v ? 'border-indigo-500 bg-indigo-500/10' : 'border-[var(--line)]'}`}><div className="font-black">{v}</div><div className="text-[10px] text-[var(--mut)]">credits · ৳{v * pay.price}</div></button>))}</div>
+                  <input type="number" inputMode="numeric" min={10} value={reqCredits || ''} onChange={(e) => setReqCredits(Number(e.target.value))} className={inp} placeholder="Or type credits (minimum 10)" />
+                  <div className="flex gap-2"><input value={cpIn} onChange={(e) => { setCpIn(e.target.value); setCpApplied(null); }} placeholder="Coupon code (optional)" className={inp} /><button type="button" className={ghost} onClick={checkCoupon}>Apply</button></div>
+                  {cpApplied && <div className="text-xs font-bold text-emerald-500">Coupon {cpApplied.code}: {cpApplied.pct}% off applied</div>}
+                  <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3"><span className="text-[var(--mut)]">Total price</span><b className="text-lg">৳{Math.round(Math.max(0, Math.floor(reqCredits || 0)) * pay.price * (100 - (cpApplied?.pct || 0)) / 100)}</b></div>
+                  <button type="button" disabled={!reqCredits || reqCredits < 10} className={`${primary} w-full disabled:opacity-50`} onClick={() => setTopStep('method')}><Wallet className="h-4 w-4" />Recharge</button>
+                </>}
+                {topStep === 'method' && <>
+                  <div className="text-center"><div className="font-black text-base">Choose payment method</div><div className="mt-1 inline-block rounded-full bg-indigo-500/10 px-4 py-1 font-black text-indigo-500">{Math.floor(reqCredits)} credits · ৳{Math.round(Math.floor(reqCredits || 0) * pay.price * (100 - (cpApplied?.pct || 0)) / 100)}</div></div>
+                  {payAccounts.filter((x) => x.active).length === 0 && <div className="text-center text-[var(--mut)]">No payment method yet. Ask the admin.</div>}
+                  <div className="grid grid-cols-2 gap-3">{payAccounts.filter((x) => x.active).map((x) => (
+                    <button key={x.id} type="button" onClick={() => setPayPick(x.id)} className={`relative rounded-2xl border-2 px-3 py-5 text-center ${payPick === x.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-[var(--line)]'}`}>
+                      <span className="absolute right-2 top-2 rounded bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold text-white">ONLINE</span>
+                      <div className="text-lg font-black">{x.method}</div><div className="text-xs text-[var(--mut)]">{x.kind}</div></button>))}</div>
+                  <button type="button" disabled={!payPick || !payAccounts.some((x) => x.id === payPick && x.active)} className={`${primary} w-full disabled:opacity-50`} onClick={() => setTopStep('pay')}>{(() => { const a = payAccounts.find((x) => x.id === payPick); return a ? `Recharge with ${a.method} (${a.kind})` : 'Select a method'; })()}</button>
+                  <button type="button" className={`${ghost} w-full`} onClick={() => setTopStep('amount')}>Cancel</button>
+                </>}
+                {topStep === 'pay' && (() => {
+                  const a = payAccounts.find((x) => x.id === payPick);
+                  const total = Math.round(Math.floor(reqCredits || 0) * pay.price * (100 - (cpApplied?.pct || 0)) / 100);
+                  return <>
+                    <div className="text-center font-black text-base">{a?.method} · {a?.kind}</div>
+                    <div className="space-y-2 rounded-xl bg-[var(--soft)] px-4 py-3 text-xs">
+                      <div><b>1.</b> Open the {a?.method} app{a?.method?.toLowerCase().includes('bkash') ? ' or dial *247#' : ''} and choose Send Money / Payment.</div>
+                      <div><b>2.</b> Send exactly <b>৳{total}</b> to this number:</div>
+                      <div className="flex items-center gap-2 rounded-lg bg-[var(--card)] px-3 py-2"><b className="flex-1 text-center text-base break-all">{a?.number}</b><button type="button" className={`${ghost} !p-2`} onClick={() => a && flash('paynum', a.number)}>{copied === 'paynum' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>
+                      <div><b>3.</b> Then enter your number, the TrxID and upload the payment screenshot.</div>
+                    </div>
+                    <div><label className="text-xs font-bold text-[var(--mut)]">Amount (৳)</label><input readOnly value={total} className={`${inp} mt-1 opacity-70`} /></div>
+                    <div><label className="text-xs font-bold text-[var(--mut)]">Your {a?.method} number</label><input inputMode="tel" value={senderNo} onChange={(e) => setSenderNo(e.target.value)} className={`${inp} mt-1`} placeholder="01XXXXXXXXX" /></div>
+                    <div><label className="text-xs font-bold text-[var(--mut)]">TrxID</label><input value={trx} onChange={(e) => setTrx(e.target.value)} className={`${inp} mt-1`} placeholder="Example: TX1234567" /></div>
+                    <div><label className="text-xs font-bold text-[var(--mut)]">Your email</label><input readOnly value={user?.email || ''} className={`${inp} mt-1 opacity-70`} /></div>
+                    <div><label className="text-xs font-bold text-[var(--mut)]">Payment proof (screenshot)</label><input type="file" accept="image/*" onChange={(e) => setProofFile(e.target.files?.[0] || null)} className={`${inp} mt-1`} />{proofFile && <div className="mt-1 text-xs text-emerald-500">{proofFile.name}</div>}</div>
+                    <button type="button" disabled={topBusy} className={`${primary} w-full disabled:opacity-50`} onClick={submitTopup}>{topBusy ? 'Please wait…' : 'VERIFY & SUBMIT'}</button>
+                    <button type="button" disabled={topBusy} className={`${ghost} w-full`} onClick={() => setTopStep('method')}>CANCEL</button>
+                    <div className="text-center text-[11px] text-[var(--mut)]">Minimum recharge: 10 credits. Fill all the details and upload a clear screenshot, otherwise the request may be rejected.</div>
+                  </>;
+                })()}
               </div>
-              {reqs.length > 0 && <div className={`${card} divide-y divide-[var(--line)]`}>{reqs.map((r) => (
-                <div key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm"><span><b>{r.credits}</b> credits · ৳{Number(r.amount_bdt)} · <span className="text-xs text-[var(--mut)]">{r.trx_id}</span></span><span className={`text-xs font-bold ${r.status === 'approved' ? 'text-emerald-500' : r.status === 'rejected' ? 'text-rose-500' : 'text-amber-500'}`}>{r.status}</span></div>))}</div>}
+              <div className={`${card} overflow-hidden`}>
+                <div className="px-5 py-3 font-black text-sm">Transactions</div>
+                {reqs.length === 0 ? <div className="px-5 pb-6 pt-2 text-center text-xs text-[var(--mut)]">No transactions yet</div> : <div className="divide-y divide-[var(--line)]">{reqs.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                    <div className="min-w-0"><div><b>{r.credits}</b> credits · ৳{Number(r.amount_bdt)}</div><div className="text-[11px] text-[var(--mut)] break-all">{r.method} · {r.trx_id} · {new Date(r.created_at).toLocaleString()}</div></div>
+                    <span className={`shrink-0 text-xs font-bold ${r.status === 'approved' ? 'text-emerald-500' : r.status === 'rejected' ? 'text-rose-500' : 'text-amber-500'}`}>{r.status}</span>
+                  </div>))}</div>}
+              </div>
             </div>) : (<>
               <div className={`${card} p-5 mb-6 space-y-3`}>
                 <div className="font-black">Payment accounts shown to resellers</div>
@@ -705,8 +767,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
                 {reqs.filter((r) => r.status === 'pending').map((r) => (
                   <div key={r.id} className="border-t border-[var(--line)] py-3 text-sm">
                     <div><b>{resellers.find((x: any) => x.id === r.owner_id)?.name || 'Reseller'}</b> · {r.credits} credits · ৳{Number(r.amount_bdt)}</div>
-                    <div className="text-xs text-[var(--mut)] mb-2">{r.method} · TrxID <b>{r.trx_id}</b>{r.discount_percent > 0 ? ` · coupon ${r.coupon_code} (-${r.discount_percent}%)` : ''} · {new Date(r.created_at).toLocaleString()}</div>
-                    <div className="flex gap-2"><button type="button" className={`${primary} !py-1.5 text-xs`} onClick={() => resolveReq(r.id, true)}>Approve</button><button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => resolveReq(r.id, false)}>Reject</button></div>
+                    <div className="text-xs text-[var(--mut)] mb-2">{r.method} · TrxID <b>{r.trx_id}</b>{r.sender_number ? ` · from ${r.sender_number}` : ''}{r.discount_percent > 0 ? ` · coupon ${r.coupon_code} (-${r.discount_percent}%)` : ''} · {new Date(r.created_at).toLocaleString()}</div>
+                    <div className="flex gap-2"><button type="button" className={`${primary} !py-1.5 text-xs`} onClick={() => resolveReq(r.id, true)}>Approve</button>{r.proof_path && <button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => viewProof(r.proof_path)}>View screenshot</button>}<button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => resolveReq(r.id, false)}>Reject</button></div>
                   </div>))}
               </div>}
               <select className={`${inp} mb-4`} value={creditTo} onChange={(e) => setCreditTo(e.target.value)}><option value="">Select reseller</option>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (my account)' }] : []), ...resellers].map((r: any) => <option key={r.id} value={r.id}>{r.name} ({r.credits ?? 0} credits)</option>)}</select>
