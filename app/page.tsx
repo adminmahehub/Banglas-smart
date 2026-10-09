@@ -291,6 +291,19 @@ export default function MaheHubEnterpriseSystem() {
   }, [homeToken]);
   const [activeSetupTab, setActiveSetupTab] = useState<'iphone' | 'android' | 'openvpn'>('iphone');
   const [resellerSalesSlider, setResellerSalesSlider] = useState<number>(50);
+  const [site, setSite] = useState<Record<string, string>>({});
+  const [notices, setNotices] = useState<{ id: string; kind: string; title: string; body: string }[]>([]);
+  const [hiddenNotices, setHiddenNotices] = useState<string[]>([]);
+  const price = Number(site.price_per_credit) || 200;
+  const waBd = site.support_whatsapp_bd || '8801614082537';
+  const waMy = site.support_whatsapp_my || '60173103546';
+  const supportEmail = site.support_email || 'b2b@mahehub.com';
+  const fbUrl = site.facebook_url || 'https://www.facebook.com/share/1DQkYhY8hY/?mibextid=wwXIfr';
+  const tgUrl = site.telegram_url || 'https://t.me/+5v_WpMb2pjwwNDFl';
+  useEffect(() => {
+    supabase.rpc('public_site_settings').then(({ data }) => { if (data) setSite(data as Record<string, string>); });
+    supabase.rpc('active_announcements').then(({ data }) => { if (Array.isArray(data)) setNotices(data as any); });
+  }, []);
 
   // Seller Login Form States
   const [loginEmail, setLoginEmail] = useState('admin@mahehub.com');
@@ -885,7 +898,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
       agencyOrUser: `Created: ${cleanPhone} (${fastMonths} Mo)`,
       type: 'Account Creation',
       gateway: 'Credits Deduction',
-      amountBdt: fastMonths * 200,
+      amountBdt: fastMonths * price,
       creditsChanged: -requiredCredits,
       date: new Date().toISOString().replace('T', ' ').substring(0, 16),
       status: 'Completed',
@@ -935,7 +948,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
       agencyOrUser: `Renewed: ${renewTargetCustomer.userId} (+${renewMonths} Mo)`,
       type: 'Renewal',
       gateway: 'Credits Deduction',
-      amountBdt: renewMonths * 200,
+      amountBdt: renewMonths * price,
       creditsChanged: -requiredCredits,
       date: new Date().toISOString().replace('T', ' ').substring(0, 16),
       status: 'Completed',
@@ -1148,7 +1161,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
             {/* Direct Header Contacts from Client Screenshot */}
             <div className="hidden xl:flex items-center gap-2">
               <a
-                href="https://www.facebook.com/share/1DQkYhY8hY/?mibextid=wwXIfr"
+                href={fbUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="px-2.5 py-1.5 rounded-lg border border-blue-500/30 bg-blue-600/10 hover:bg-blue-600 text-blue-600 hover:text-white font-bold text-[11px] transition-all flex items-center gap-1.5 shadow-sm"
@@ -1159,7 +1172,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
               </a>
 
               <a
-                href="https://t.me/+5v_WpMb2pjwwNDFl"
+                href={tgUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="px-2.5 py-1.5 rounded-lg border border-sky-500/30 bg-sky-600/10 hover:bg-sky-500 text-sky-500 hover:text-white font-bold text-[11px] transition-all flex items-center gap-1.5 shadow-sm"
@@ -1192,29 +1205,29 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
               </a>
 
               <a
-                href="https://wa.me/8801614082537?text=Hello%20MaheHub%20BD%20Support"
+                href={`https://wa.me/${waBd}?text=Hello%20MaheHub%20BD%20Support`}
                 target="_blank"
                 rel="noreferrer"
                 className="px-2.5 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-600/10 hover:bg-[#25D366] text-emerald-600 hover:text-white font-bold text-[11px] transition-all flex items-center gap-1.5 shadow-sm"
                 title="Bangladesh WhatsApp Support Desk"
               >
                 <MessageCircle className="h-3.5 w-3.5" />
-                <span>🇧🇩 +880 1614-082537</span>
+                <span>🇧🇩 +{waBd}</span>
               </a>
 
               <a
-                href="https://wa.me/60173103546?text=Hello%20MaheHub%20Malaysia%20Support"
+                href={`https://wa.me/${waMy}?text=Hello%20MaheHub%20Malaysia%20Support`}
                 target="_blank"
                 rel="noreferrer"
                 className="px-2.5 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-600/10 hover:bg-[#25D366] text-emerald-600 hover:text-white font-bold text-[11px] transition-all flex items-center gap-1.5 shadow-sm"
                 title="Malaysia WhatsApp Regional Desk"
               >
                 <MessageCircle className="h-3.5 w-3.5" />
-                <span>🇲🇾 +60 17-310 3546</span>
+                <span>🇲🇾 +{waMy}</span>
               </a>
 
               <a
-                href="mailto:b2b@mahehub.com"
+                href={`mailto:${supportEmail}`}
                 className="px-2.5 py-1.5 rounded-lg border border-purple-500/30 bg-purple-600/10 hover:bg-purple-600 text-purple-500 hover:text-white font-bold text-[11px] transition-all flex items-center gap-1.5 shadow-sm"
                 title="B2B Server Integration & API: b2b@mahehub.com"
               >
@@ -1235,6 +1248,16 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
 
         </div>
       </header>
+      {notices.filter((n) => !hiddenNotices.includes(n.id)).length > 0 && (
+        <div className="mx-auto max-w-4xl space-y-2 px-4 pt-3">
+          {notices.filter((n) => !hiddenNotices.includes(n.id)).map((n) => (
+            <div key={n.id} className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${n.kind === 'offer' ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300'}`}>
+              <div><div className="font-black">{n.kind === 'offer' ? '🎁 ' : '📢 '}{n.title}</div>{n.body && <div className="mt-0.5 text-xs opacity-90 whitespace-pre-line">{n.body}</div>}</div>
+              <button type="button" aria-label="Close" className="shrink-0 text-lg leading-none opacity-70" onClick={() => setHiddenNotices((h) => [...h, n.id])}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 1. VIEW: PUBLIC TELECOM STOREFRONT (Fast, Secure, Smart DNS) */}
@@ -1519,7 +1542,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                   </button>
                   <p className="text-center text-[11px] text-slate-400">
                     Having trouble?{' '}
-                    <a className="text-emerald-400 underline" target="_blank" rel="noreferrer" href="https://wa.me/8801614082537?text=Hello%20MaheHub%2C%20I%20want%20a%20free%201-hour%20trial">Ask on WhatsApp</a>
+                    <a className="text-emerald-400 underline" target="_blank" rel="noreferrer" href={`https://wa.me/${waBd}?text=Hello%20MaheHub%2C%20I%20want%20a%20free%201-hour%20trial`}>Ask on WhatsApp</a>
                   </p>
                 </>
               ) : (
@@ -1833,8 +1856,8 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-center text-xs">
                   <div className="p-3.5 rounded-2xl bg-[#0b1227] border border-slate-800">
-                    <span className="text-slate-400 block text-[10px]">হোলসেল খরচ (৳২০০ × {resellerSalesSlider}):</span>
-                    <strong className="text-slate-200 font-mono text-sm">৳{(resellerSalesSlider * 200).toLocaleString()}</strong>
+                    <span className="text-slate-400 block text-[10px]">হোলসেল খরচ (৳{price} × {resellerSalesSlider}):</span>
+                    <strong className="text-slate-200 font-mono text-sm">৳{(resellerSalesSlider * price).toLocaleString()}</strong>
                   </div>
 
                   <div className="p-3.5 rounded-2xl bg-[#0b1227] border border-slate-800">
@@ -1845,7 +1868,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                   <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/60 to-emerald-900/40 border border-emerald-500/40">
                     <span className="text-emerald-300 block text-[10px] font-bold">আপনার মাসিক নেট লাভ:</span>
                     <strong className="text-emerald-400 font-mono text-base font-black">
-                      +৳{(resellerSalesSlider * (1000 - 200)).toLocaleString()} BDT
+                      +৳{(resellerSalesSlider * (1000 - price)).toLocaleString()} BDT
                     </strong>
                   </div>
                 </div>
@@ -1882,15 +1905,15 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
                   <a
-                    href="mailto:b2b@mahehub.com?subject=B2B%20Server%20API%20Integration%20Request"
+                    href={`mailto:${supportEmail}?subject=B2B%20Server%20API%20Integration%20Request`}
                     className="px-5 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95"
                   >
                     <Mail className="h-4 w-4" />
-                    <span>Get API Key (b2b@mahehub.com)</span>
+                    <span>Get API Key ({supportEmail})</span>
                   </a>
 
                   <a
-                    href="https://wa.me/8801614082537?text=Hello%20MaheHub%20I%20want%20to%20connect%20my%20website%20to%20your%20server%20via%20API"
+                    href={`https://wa.me/${waBd}?text=Hello%20MaheHub%20I%20want%20to%20connect%20my%20website%20to%20your%20server%20via%20API`}
                     target="_blank"
                     rel="noreferrer"
                     className="px-5 py-3 rounded-2xl bg-[#25D366] hover:bg-[#20ba5a] text-white font-black text-xs flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95"
@@ -2196,11 +2219,11 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                       </div>
                     </div>
                     <div className="font-mono text-base font-black text-emerald-500 mb-3">
-                      +880 1614-082537 <span className="text-xs text-slate-400 font-normal">(01614-082537)</span>
+                      +{waBd}
                     </div>
                     <div className="flex items-center gap-2">
                       <a
-                        href="https://wa.me/8801614082537?text=Hello%20MaheHub%20BD%20Support"
+                        href={`https://wa.me/${waBd}?text=Hello%20MaheHub%20BD%20Support`}
                         target="_blank"
                         rel="noreferrer"
                         className="flex-1 py-2 px-3 rounded-xl bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
@@ -2209,7 +2232,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                         <span>WhatsApp BD</span>
                       </a>
                       <a
-                        href="tel:+8801614082537"
+                        href={`tel:+${waBd}`}
                         className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1 transition-all ${
                           theme === 'dark' ? 'border-slate-700 bg-slate-800 hover:bg-slate-700 text-white' : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-900'
                         }`}
@@ -2237,11 +2260,11 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                       </div>
                     </div>
                     <div className="font-mono text-base font-black text-emerald-500 mb-3">
-                      +60 17-310 3546 <span className="text-xs text-slate-400 font-normal">(017-3103546)</span>
+                      +{waMy}
                     </div>
                     <div className="flex items-center gap-2">
                       <a
-                        href="https://wa.me/60173103546?text=Hello%20MaheHub%20Malaysia%20Support"
+                        href={`https://wa.me/${waMy}?text=Hello%20MaheHub%20Malaysia%20Support`}
                         target="_blank"
                         rel="noreferrer"
                         className="flex-1 py-2 px-3 rounded-xl bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
@@ -2250,7 +2273,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                         <span>WhatsApp MY</span>
                       </a>
                       <a
-                        href="tel:+60173103546"
+                        href={`tel:+${waMy}`}
                         className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1 transition-all ${
                           theme === 'dark' ? 'border-slate-700 bg-slate-800 hover:bg-slate-700 text-white' : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-900'
                         }`}
@@ -2278,7 +2301,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                     </div>
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <a
-                        href="https://www.facebook.com/share/1DQkYhY8hY/?mibextid=wwXIfr"
+                        href={fbUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="py-1.5 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95"
@@ -2287,7 +2310,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                         <span>Facebook</span>
                       </a>
                       <a
-                        href="https://t.me/+5v_WpMb2pjwwNDFl"
+                        href={tgUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="py-1.5 px-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95"
@@ -2355,7 +2378,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <a
-                        href="https://www.facebook.com/share/1DQkYhY8hY/?mibextid=wwXIfr"
+                        href={fbUrl}
                         target="_blank"
                         rel="noreferrer"
                         title="Official Facebook Page"
@@ -2364,7 +2387,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                         <Facebook className="h-4 w-4" />
                       </a>
                       <a
-                        href="https://t.me/+5v_WpMb2pjwwNDFl"
+                        href={tgUrl}
                         target="_blank"
                         rel="noreferrer"
                         title="Official Telegram Channel"
@@ -2391,7 +2414,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                         <Youtube className="h-4 w-4" />
                       </a>
                       <a
-                        href="https://wa.me/8801614082537?text=Hello%20MaheHub%20BD%20Support"
+                        href={`https://wa.me/${waBd}?text=Hello%20MaheHub%20BD%20Support`}
                         target="_blank"
                         rel="noreferrer"
                         title="WhatsApp Bangladesh (+880 1614-082537)"
@@ -2400,7 +2423,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                         <MessageCircle className="h-4 w-4" />
                       </a>
                       <a
-                        href="https://wa.me/60173103546?text=Hello%20MaheHub%20Malaysia%20Support"
+                        href={`https://wa.me/${waMy}?text=Hello%20MaheHub%20Malaysia%20Support`}
                         target="_blank"
                         rel="noreferrer"
                         title="WhatsApp Malaysia (+60 17-310 3546)"
@@ -2435,8 +2458,8 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                       </span>
                       <div className="text-[11px] text-slate-400">
                         Tel / WhatsApp:{' '}
-                        <a href="https://wa.me/8801614082537" className="font-mono font-bold hover:underline text-cyan-500">
-                          +880 1614-082537
+                        <a href={`https://wa.me/${waBd}`} className="font-mono font-bold hover:underline text-cyan-500">
+                          +{waBd}
                         </a>
                       </div>
                       <div className="text-[10px] text-slate-500">Local: 01614082537 (24/7 Live)</div>
@@ -2448,8 +2471,8 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                       </span>
                       <div className="text-[11px] text-slate-400">
                         Tel / WhatsApp:{' '}
-                        <a href="https://wa.me/60173103546" className="font-mono font-bold hover:underline text-cyan-500">
-                          +60 17-310 3546
+                        <a href={`https://wa.me/${waMy}`} className="font-mono font-bold hover:underline text-cyan-500">
+                          +{waMy}
                         </a>
                       </div>
                       <div className="text-[10px] text-slate-500">Regional: 0173103546 (09:00-23:00 MYT)</div>
@@ -2463,7 +2486,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                         Admin: <a href="mailto:admin@mahehub.com" className="hover:underline font-mono text-cyan-400 font-bold">admin@mahehub.com</a>
                       </div>
                       <div className="text-[11px] text-slate-400">
-                        B2B &amp; API: <a href="mailto:b2b@mahehub.com" className="hover:underline font-mono text-cyan-400 font-bold">b2b@mahehub.com</a>
+                        B2B &amp; API: <a href={`mailto:${supportEmail}`} className="hover:underline font-mono text-cyan-400 font-bold">{supportEmail}</a>
                       </div>
                     </div>
                   </div>
@@ -3333,7 +3356,7 @@ MIIB/zCCAaWgAwIBAgIUQZ5F0bXy4Gj01MAHEHUB_BDIX_ISOLATED_VPN_CA...
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
                     <div>
                       <h2 className="text-lg font-bold text-white">Reseller Agencies &amp; Credit Balance</h2>
-                      <p className="text-xs text-slate-400">1 Credit = 1 Month DNS. Minimum package: 10 Credits = ৳2,000</p>
+                      <p className="text-xs text-slate-400">1 Credit = 1 Month DNS. Minimum package: 10 Credits = ৳{(10 * price).toLocaleString()}</p>
                     </div>
 
                     <button
@@ -4946,11 +4969,11 @@ Import Link: ${vpnReadyAccount.importLink}`}
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               </div>
               <div className="font-mono text-xs font-bold text-emerald-500">
-                +880 1614-082537 <span className="text-[10px] text-slate-400 font-normal">(01614-082537)</span>
+                +{waBd}
               </div>
               <div className="flex items-center gap-2 pt-1">
                 <a
-                  href="https://wa.me/8801614082537?text=Hello%20MaheHub%20BD%20Support"
+                  href={`https://wa.me/${waBd}?text=Hello%20MaheHub%20BD%20Support`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex-1 py-1.5 px-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow"
@@ -4959,7 +4982,7 @@ Import Link: ${vpnReadyAccount.importLink}`}
                   <span>WhatsApp BD</span>
                 </a>
                 <a
-                  href="tel:+8801614082537"
+                  href={`tel:+${waBd}`}
                   className={`py-1.5 px-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1 ${
                     theme === 'dark' ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-white text-slate-900'
                   }`}
@@ -4981,11 +5004,11 @@ Import Link: ${vpnReadyAccount.importLink}`}
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               </div>
               <div className="font-mono text-xs font-bold text-emerald-500">
-                +60 17-310 3546 <span className="text-[10px] text-slate-400 font-normal">(017-3103546)</span>
+                +{waMy}
               </div>
               <div className="flex items-center gap-2 pt-1">
                 <a
-                  href="https://wa.me/60173103546?text=Hello%20MaheHub%20Malaysia%20Support"
+                  href={`https://wa.me/${waMy}?text=Hello%20MaheHub%20Malaysia%20Support`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex-1 py-1.5 px-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow"
@@ -4994,7 +5017,7 @@ Import Link: ${vpnReadyAccount.importLink}`}
                   <span>WhatsApp MY</span>
                 </a>
                 <a
-                  href="tel:+60173103546"
+                  href={`tel:+${waMy}`}
                   className={`py-1.5 px-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1 ${
                     theme === 'dark' ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-white text-slate-900'
                   }`}
@@ -5012,7 +5035,7 @@ Import Link: ${vpnReadyAccount.importLink}`}
               </span>
               <div className="grid grid-cols-2 gap-2">
                 <a
-                  href="https://www.facebook.com/share/1DQkYhY8hY/?mibextid=wwXIfr"
+                  href={fbUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="py-1.5 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow"
@@ -5021,7 +5044,7 @@ Import Link: ${vpnReadyAccount.importLink}`}
                   <span>Facebook</span>
                 </a>
                 <a
-                  href="https://t.me/+5v_WpMb2pjwwNDFl"
+                  href={tgUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="py-1.5 px-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow"
@@ -5060,7 +5083,7 @@ Import Link: ${vpnReadyAccount.importLink}`}
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 font-medium">B2B &amp; API Partner:</span>
-                <a href="mailto:b2b@mahehub.com" className="font-mono text-cyan-400 font-bold hover:underline">b2b@mahehub.com</a>
+                <a href={`mailto:${supportEmail}`} className="font-mono text-cyan-400 font-bold hover:underline">{supportEmail}</a>
               </div>
             </div>
           </div>

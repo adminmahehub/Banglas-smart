@@ -2,18 +2,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Network, PlusCircle, Activity, KeyRound, UserCircle, LogOut, Search,
-  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil,
+  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone,
 } from 'lucide-react';
 import type { OpenVpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
 import { COUNTRIES } from '../lib/countries';
 
-type Tab = 'dashboard' | 'users' | 'resellers' | 'credit' | 'activity' | 'api' | 'profile';
+type Tab = 'dashboard' | 'users' | 'resellers' | 'credit' | 'site' | 'activity' | 'api' | 'profile';
 const NAV: { id: Tab; label: string; icon: any }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'resellers', label: 'Resellers', icon: Network },
   { id: 'credit', label: 'Add Credit', icon: PlusCircle },
+  { id: 'site', label: 'Site & Notices', icon: Megaphone },
   { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'api', label: 'API', icon: KeyRound },
   { id: 'profile', label: 'User Profile', icon: UserCircle },
@@ -97,6 +98,11 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [pay, setPay] = useState({ method: 'bKash', number: '', price: 200 });
   const [reqCredits, setReqCredits] = useState<number>(10);
   const [trx, setTrx] = useState('');
+  const [siteCfg, setSiteCfg] = useState<Record<string, string>>({});
+  const [siteForm, setSiteForm] = useState({ support_whatsapp_bd: '', support_whatsapp_my: '', support_email: '', facebook_url: '', telegram_url: '' });
+  const [annList, setAnnList] = useState<any[]>([]);
+  const [allNotices, setAllNotices] = useState<any[]>([]);
+  const [nForm, setNForm] = useState({ kind: 'notice', title: '', body: '', days: '0' });
   const [topStep, setTopStep] = useState<'amount' | 'method' | 'pay'>('amount');
   const [senderNo, setSenderNo] = useState('');
   const [proofFile, setProofFile] = useState<File | null>(null);
@@ -155,8 +161,14 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setRefInfo(ri.data || null);
     const nt = await supabase.rpc('pending_expiry_notices');
     setNotices(nt.data || []);
+    const an = await supabase.rpc('active_announcements');
+    setAnnList(Array.isArray(an.data) ? an.data : []);
+    const aa = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+    setAllNotices(aa.data || []);
     const st = await supabase.from('app_settings').select('key,value');
     const sm: Record<string, string> = {}; (st.data || []).forEach((x: any) => { sm[x.key] = x.value; });
+    setSiteCfg(sm);
+    setSiteForm({ support_whatsapp_bd: sm.support_whatsapp_bd || '', support_whatsapp_my: sm.support_whatsapp_my || '', support_email: sm.support_email || '', facebook_url: sm.facebook_url || '', telegram_url: sm.telegram_url || '' });
     setPay({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: Number(sm.price_per_credit) || PER_CREDIT });
     setPayEdit({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: String(Number(sm.price_per_credit) || PER_CREDIT) });
     const pa = await supabase.from('payment_accounts').select('*').order('created_at', { ascending: true });
@@ -255,6 +267,28 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setRsDone({ email: rsForm.email.trim(), password: rsForm.password, phone: cc + local });
     setRsForm({ name: '', country: rsForm.country, phone: '', email: '', password: '' });
     load();
+  }
+  async function saveSite() {
+    for (const [k, v] of Object.entries(siteForm)) {
+      if ((v || '') === (siteCfg[k] || '')) continue;
+      const { error } = await supabase.rpc('admin_set_setting', { p_key: k, p_value: v });
+      if (error) { alert(error.message); return; }
+    }
+    alert('Saved. The website now shows the new details.'); load();
+  }
+  async function saveNotice() {
+    const { error } = await supabase.rpc('admin_save_announcement', { p_id: null, p_kind: nForm.kind, p_title: nForm.title, p_body: nForm.body, p_active: true, p_days: Math.floor(Number(nForm.days) || 0) });
+    if (error) { alert(error.message); return; }
+    setNForm({ ...nForm, title: '', body: '' }); load();
+  }
+  async function toggleNotice(n: any) {
+    const { error } = await supabase.rpc('admin_save_announcement', { p_id: n.id, p_kind: n.kind, p_title: n.title, p_body: n.body, p_active: !n.active, p_days: 0 });
+    if (error) alert(error.message); else load();
+  }
+  async function delNotice(n: any) {
+    if (!confirm(`Delete "${n.title}"?`)) return;
+    const { error } = await supabase.rpc('admin_delete_announcement', { p_id: n.id });
+    if (error) alert(error.message); else load();
   }
   async function savePay() {
     for (const [k, v] of [['pay_method', payEdit.method], ['pay_number', payEdit.number], ['price_per_credit', payEdit.price]] as const) {
@@ -540,7 +574,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           <div className="leading-tight"><div className="font-black tracking-tight">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">DNS PANEL</div></div>
           <button className="ml-auto lg:hidden" onClick={() => setMenu(false)}><X className="h-5 w-5" /></button>
         </div>
-        <nav className="space-y-1 flex-1">{NAV.map(({ id, label, icon: I }) => (
+        <nav className="space-y-1 flex-1">{NAV.filter((n) => n.id !== 'site' || isAdmin).map(({ id, label, icon: I }) => (
           <button key={id} onClick={() => { setTab(id); setMenu(false); }}
             className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${tab === id ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/25' : 'text-[var(--mut)] hover:bg-[var(--soft)] hover:text-[var(--ink)]'}`}>
             <I className="h-[18px] w-[18px]" />{label}</button>))}
@@ -562,6 +596,10 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
 
         <div className="p-4 sm:p-8 max-w-6xl mx-auto">
           {tab === 'dashboard' && (<>
+            {annList.length > 0 && <div className="mb-5 space-y-2">{annList.map((n) => (
+              <div key={n.id} className={`rounded-2xl border px-4 py-3 text-sm ${n.kind === 'offer' ? 'border-amber-500/40 bg-amber-500/10 text-amber-500' : 'border-indigo-500/40 bg-indigo-500/10 text-indigo-500'}`}>
+                <div className="font-black">{n.kind === 'offer' ? '🎁 ' : '📢 '}{n.title}</div>{n.body && <div className="mt-0.5 text-xs whitespace-pre-line opacity-90">{n.body}</div>}
+              </div>))}</div>}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 p-7 sm:p-9 text-white shadow-xl shadow-indigo-500/25">
               <svg className="absolute right-0 bottom-0 h-full opacity-25" viewBox="0 0 400 200" preserveAspectRatio="xMaxYMax slice"><path d="M0 200 L90 70 L150 140 L240 30 L340 150 L400 90 V200Z" fill="#fff" /><circle cx="330" cy="40" r="22" fill="#fff" /></svg>
               <div className="relative max-w-lg"><div className="text-xs font-bold uppercase tracking-widest opacity-80">Welcome back</div>
@@ -799,6 +837,41 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
 
           {tab === 'activity' && (<><Head t="Activity" s="Recent panel activity" />
             <div className={`${card} divide-y divide-[var(--line)]`}>{log.map((l, i) => <div key={i} className="flex gap-4 px-5 py-3.5 text-sm"><span className="w-44 shrink-0 text-xs text-[var(--mut)]">{l.t}</span><span className="font-semibold">{l.m}</span></div>)}</div></>)}
+
+          {tab === 'site' && isAdmin && (<>
+            <Head t="Site & Notices" s="Control the website numbers, links and announcements from here" />
+            <div className={`${card} p-5 mb-6 space-y-3`}>
+              <div className="font-black">Website contact details</div>
+              <div className="text-xs text-[var(--mut)]">Credit price is set in Add Credit (now ৳{pay.price} per credit). It also updates the website.</div>
+              <label className="text-xs font-bold text-[var(--mut)]">WhatsApp Bangladesh (country code + number, digits only)</label>
+              <input className={inp} inputMode="numeric" value={siteForm.support_whatsapp_bd} onChange={(e) => setSiteForm({ ...siteForm, support_whatsapp_bd: e.target.value })} placeholder="8801XXXXXXXXX" />
+              <label className="text-xs font-bold text-[var(--mut)]">WhatsApp Malaysia</label>
+              <input className={inp} inputMode="numeric" value={siteForm.support_whatsapp_my} onChange={(e) => setSiteForm({ ...siteForm, support_whatsapp_my: e.target.value })} placeholder="601XXXXXXXX" />
+              <label className="text-xs font-bold text-[var(--mut)]">Support email</label>
+              <input className={inp} type="email" value={siteForm.support_email} onChange={(e) => setSiteForm({ ...siteForm, support_email: e.target.value })} placeholder="name@example.com" />
+              <label className="text-xs font-bold text-[var(--mut)]">Facebook link</label>
+              <input className={inp} value={siteForm.facebook_url} onChange={(e) => setSiteForm({ ...siteForm, facebook_url: e.target.value })} placeholder="https://..." />
+              <label className="text-xs font-bold text-[var(--mut)]">Telegram link</label>
+              <input className={inp} value={siteForm.telegram_url} onChange={(e) => setSiteForm({ ...siteForm, telegram_url: e.target.value })} placeholder="https://t.me/..." />
+              <button type="button" className={`${primary} w-full`} onClick={saveSite}>Save website details</button>
+            </div>
+            <div className={`${card} p-5 space-y-3`}>
+              <div className="font-black">Notices & offers</div>
+              <div className="text-xs text-[var(--mut)]">Shown on the website and on every reseller dashboard until you disable or delete them.</div>
+              <div className="grid grid-cols-2 gap-2">
+                <select className={inp} value={nForm.kind} onChange={(e) => setNForm({ ...nForm, kind: e.target.value })}><option value="notice">Notice</option><option value="offer">Offer</option></select>
+                <input className={inp} inputMode="numeric" value={nForm.days} onChange={(e) => setNForm({ ...nForm, days: e.target.value.replace(/\D/g, '') })} placeholder="Valid days (0 = until removed)" />
+              </div>
+              <input className={inp} value={nForm.title} onChange={(e) => setNForm({ ...nForm, title: e.target.value })} placeholder="Title" />
+              <textarea className={`${inp} min-h-[84px]`} value={nForm.body} onChange={(e) => setNForm({ ...nForm, body: e.target.value })} placeholder="Message (optional)" />
+              <button type="button" className={`${primary} w-full`} onClick={saveNotice}>Publish</button>
+              {allNotices.length === 0 && <div className="text-sm text-[var(--mut)]">Nothing published yet.</div>}
+              {allNotices.map((n) => <div key={n.id} className="flex items-center justify-between gap-2 border-t border-[var(--line)] pt-3 text-sm">
+                <div className="min-w-0"><div className={n.active ? 'font-bold' : 'font-bold opacity-50'}>{n.kind === 'offer' ? '🎁 ' : '📢 '}{n.title}</div>{n.body && <div className="text-xs text-[var(--mut)] line-clamp-2">{n.body}</div>}{n.ends_at && <div className="text-[11px] text-[var(--mut)]">until {new Date(n.ends_at).toLocaleDateString('en-GB')}</div>}</div>
+                <div className="flex gap-2 shrink-0"><button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => toggleNotice(n)}>{n.active ? 'Disable' : 'Enable'}</button><button type="button" className={`${ghost} !p-2 text-rose-500`} onClick={() => delNotice(n)}><Trash2 className="h-4 w-4" /></button></div>
+              </div>)}
+            </div>
+          </>)}
 
           {tab === 'api' && (<><Head t="API" s="Reseller API (design preview)" />
             <div className={`${card} p-5 mb-4`}><div className="text-xs font-bold text-[var(--mut)] mb-2">API KEY</div>
