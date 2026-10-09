@@ -373,7 +373,11 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     }
     setDsForm({ name: '', country: dsForm.country, ip: '', capacity: 300, hostname: '' });
     setDsBusy(false); loadDnsServers();
-    alert('Server added (status: pending). Install the agent on it, then press "Go live".');
+    alert('Server added. The installer sets it up automatically and the status turns live when it is ready (a few minutes). Make sure the server accepts the installer SSH key.');
+  }
+  async function retryDnsInstall(sv: any) {
+    const { error } = await supabase.rpc('admin_retry_dns_install', { p_id: sv.id });
+    if (error) alert(error.message); else { alert('Queued again. The installer will pick it up within a minute.'); loadDnsServers(); }
   }
   async function setDnsStatus(sv: any, status: 'live' | 'off' | 'pending') {
     const { error } = await supabase.rpc('admin_set_dns_server', { p_id: sv.id, p_status: status, p_capacity: null });
@@ -647,10 +651,23 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
 
         <div className="p-4 sm:p-8 max-w-6xl mx-auto">
           {tab === 'dashboard' && (<>
-            {annList.length > 0 && <div className="mb-5 space-y-2">{annList.map((n) => (
-              <div key={n.id} className={`rounded-2xl border px-4 py-3 text-sm ${n.kind === 'offer' ? 'border-amber-500/40 bg-amber-500/10 text-amber-500' : 'border-indigo-500/40 bg-indigo-500/10 text-indigo-500'}`}>
-                <div className="font-black">{n.kind === 'offer' ? '🎁 ' : '📢 '}{n.title}</div>{n.body && <div className="mt-0.5 text-xs whitespace-pre-line opacity-90">{n.body}</div>}
-              </div>))}</div>}
+            {annList.length > 0 && (<div className="mb-5 space-y-3">
+              <style>{`@keyframes mhShine{0%{transform:translateX(-130%) skewX(-18deg)}60%,100%{transform:translateX(330%) skewX(-18deg)}}@keyframes mhFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}@keyframes mhGlow{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.0)}50%{box-shadow:0 0 28px 2px rgba(251,191,36,.35)}}.mh-shine{position:relative;overflow:hidden}.mh-shine::after{content:"";position:absolute;top:0;left:0;height:100%;width:35%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);animation:mhShine 4.5s ease-in-out infinite;pointer-events:none}.mh-float{animation:mhFloat 2.6s ease-in-out infinite}.mh-glow{animation:mhGlow 3s ease-in-out infinite}`}</style>
+              {annList.map((n) => {
+                const offer = n.kind === 'offer';
+                return (
+                  <div key={n.id} className={`mh-glow rounded-2xl p-[2px] shadow-xl ${offer ? 'bg-gradient-to-r from-amber-300 via-orange-500 to-rose-500 shadow-amber-500/30' : 'bg-gradient-to-r from-sky-400 via-indigo-500 to-fuchsia-500 shadow-indigo-500/30'}`}>
+                    <div className={`mh-shine flex items-start gap-3.5 rounded-[14px] px-4 py-4 text-white bg-gradient-to-br ${offer ? 'from-[#2b1405] via-[#3d1d08] to-[#4d1c10]' : 'from-[#0e1433] via-[#191650] to-[#2b1459]'}`}>
+                      <div className={`mh-float grid h-12 w-12 shrink-0 place-items-center rounded-xl text-2xl shadow-lg ${offer ? 'bg-gradient-to-br from-amber-300 to-orange-500 shadow-amber-500/40' : 'bg-gradient-to-br from-sky-300 to-indigo-500 shadow-indigo-500/40'}`}>{offer ? '🎁' : '📢'}</div>
+                      <div className="min-w-0 flex-1">
+                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest ${offer ? 'bg-amber-400/20 text-amber-300 ring-1 ring-amber-300/40' : 'bg-sky-400/20 text-sky-200 ring-1 ring-sky-300/40'}`}>{offer ? 'Special offer' : 'Notice'}</span>
+                        <div className={`mt-1.5 text-lg font-black leading-snug bg-clip-text text-transparent bg-gradient-to-r ${offer ? 'from-amber-200 via-yellow-100 to-amber-300' : 'from-sky-100 via-white to-fuchsia-200'}`}>{n.title}</div>
+                        {n.body && <div className="mt-1 text-sm leading-relaxed text-white/85 whitespace-pre-line">{n.body}</div>}
+                      </div>
+                    </div>
+                  </div>);
+              })}
+            </div>)}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 p-7 sm:p-9 text-white shadow-xl shadow-indigo-500/25">
               <svg className="absolute right-0 bottom-0 h-full opacity-25" viewBox="0 0 400 200" preserveAspectRatio="xMaxYMax slice"><path d="M0 200 L90 70 L150 140 L240 30 L340 150 L400 90 V200Z" fill="#fff" /><circle cx="330" cy="40" r="22" fill="#fff" /></svg>
               <div className="relative max-w-lg"><div className="text-xs font-bold uppercase tracking-widest opacity-80">Welcome back</div>
@@ -747,9 +764,10 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
                     <span><b>{sv.name}</b>{sv.is_primary ? ' · main' : ''} · {sv.country} · <span className="font-mono text-xs">{sv.ip}</span></span>
                     <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${sv.status === 'live' ? 'bg-emerald-500/15 text-emerald-600' : sv.status === 'off' ? 'bg-rose-500/15 text-rose-500' : 'bg-amber-500/15 text-amber-600'}`}>{sv.status}</span>
                   </div>
-                  <div className="text-[11px] text-[var(--mut)]">{dnsLoad[sv.id] ?? 0} / {sv.capacity} customers · +{(sv.dial_codes || []).join(', +')}{sv.hostname ? ' · ' + sv.hostname : ''} · {sv.last_report_at ? 'last report ' + new Date(sv.last_report_at).toLocaleString() : 'no report yet'}</div>
+                  <div className="text-[11px] text-[var(--mut)]">{dnsLoad[sv.id] ?? 0} / {sv.capacity} customers · +{(sv.dial_codes || []).join(', +')}{sv.hostname ? ' · ' + sv.hostname : ''} · {sv.last_report_at ? 'last report ' + new Date(sv.last_report_at).toLocaleString() : 'no report yet'}{!sv.is_primary ? ' · setup: ' + ({ queued: 'waiting for the installer', installing: 'installing…', installed: 'installed', failed: 'FAILED' } as Record<string, string>)[sv.install_state] + (sv.install_state === 'failed' && sv.install_note ? ' (' + sv.install_note + ')' : '') : ''}</div>
                   {!sv.is_primary && (<div className="flex flex-wrap gap-1.5">
-                    {sv.status !== 'live' && <button type="button" className={`${primary} !py-1.5 text-xs`} onClick={() => setDnsStatus(sv, 'live')}>Go live</button>}
+                    {sv.install_state === 'failed' && <button type="button" className={`${primary} !py-1.5 text-xs`} onClick={() => retryDnsInstall(sv)}>Retry install</button>}
+                    {sv.status !== 'live' && <button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => setDnsStatus(sv, 'live')}>Go live</button>}
                     {sv.status === 'live' && <button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => setDnsStatus(sv, 'off')}>Turn off</button>}
                     <button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => copyDnsToken(sv)}>Copy agent token</button>
                     <button type="button" className={`${ghost} !py-1.5 text-xs text-rose-500`} onClick={() => deleteDnsServer(sv)}>Delete</button>
