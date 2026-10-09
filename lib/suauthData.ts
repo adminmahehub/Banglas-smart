@@ -176,6 +176,7 @@ export interface OpenVpnAccount {
   status: 'active' | 'expired' | 'suspended';
   importLink: string;
   multiServerFailover: string[];
+  service?: 'dns' | 'vpn';
 }
 
 export const INITIAL_OPENVPN_ACCOUNTS: OpenVpnAccount[] = [
