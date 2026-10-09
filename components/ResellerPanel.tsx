@@ -117,6 +117,12 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [newPhone, setNewPhone] = useState('');
   const [servers, setServers] = useState<any[]>([]);
   const [srvStatus, setSrvStatus] = useState<any>(null);
+  const [dnsServers, setDnsServers] = useState<any[]>([]);
+  const [dnsLoad, setDnsLoad] = useState<Record<string, number>>({});
+  const [dsForm, setDsForm] = useState({ name: '', country: 'SA', ip: '', capacity: 300, hostname: '' });
+  const [dsBusy, setDsBusy] = useState(false);
+  const [moveFor, setMoveFor] = useState<OpenVpnAccount | null>(null);
+  const [moveTo, setMoveTo] = useState('');
   const [srvBusy, setSrvBusy] = useState('');
   const [inactive, setInactive] = useState<any[]>([]);
   const [inactiveMonths, setInactiveMonths] = useState(6);
@@ -173,7 +179,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setPayEdit({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: String(Number(sm.price_per_credit) || PER_CREDIT) });
     const pa = await supabase.from('payment_accounts').select('*').order('created_at', { ascending: true });
     setPayAccounts(pa.data || []);
-    if (me?.role === 'admin') { const sv = await supabase.from('servers').select('*').order('created_at', { ascending: true }); setServers(sv.data || []); loadServerStatus(); } else setServers([]);
+    if (me?.role === 'admin') { const sv = await supabase.from('servers').select('*').order('created_at', { ascending: true }); setServers(sv.data || []); loadServerStatus(); loadDnsServers(); } else { setServers([]); setDnsServers([]); }
     setLog((a.data || []).map((x: any) => ({ t: new Date(x.created_at).toLocaleString(), m: x.message })));
   };
   useEffect(() => {
@@ -344,6 +350,50 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const { data, error } = await supabase.rpc('generate_customer_link', { p_username: a.username });
     if (error || !data) { alert('Could not create the link: ' + (error?.message || 'unknown error')); return; }
     setDnsLink({ username: a.username, url: `${window.location.origin}/c/?t=${data}` });
+  }
+  async function loadDnsServers() {
+    const [sv, ld] = await Promise.all([
+      supabase.from('dns_servers').select('*').order('created_at', { ascending: true }),
+      supabase.rpc('admin_dns_server_load'),
+    ]);
+    setDnsServers(sv.data || []);
+    const m: Record<string, number> = {}; ((ld.data as any[]) || []).forEach((x: any) => { m[x.server_id] = Number(x.customers); });
+    setDnsLoad(m);
+  }
+  async function addDnsServer() {
+    const c = COUNTRIES.find((x) => x.id === dsForm.country);
+    if (!dsForm.name.trim() || !dsForm.ip.trim() || !c) { alert('Enter the server name, country and IPv4 address.'); return; }
+    setDsBusy(true);
+    const { data, error } = await supabase.rpc('admin_add_dns_server', { p_name: dsForm.name, p_country: c.n, p_dial_codes: [c.cc], p_ip: dsForm.ip, p_capacity: Number(dsForm.capacity) || 300 });
+    if (error) { alert(error.message); setDsBusy(false); return; }
+    const row: any = Array.isArray(data) ? data[0] : data;
+    if (dsForm.hostname.trim() && row?.id) {
+      const h = await supabase.rpc('admin_set_dns_server_hostname', { p_id: row.id, p_hostname: dsForm.hostname });
+      if (h.error) alert('Server added, but the hostname was not saved: ' + h.error.message);
+    }
+    setDsForm({ name: '', country: dsForm.country, ip: '', capacity: 300, hostname: '' });
+    setDsBusy(false); loadDnsServers();
+    alert('Server added (status: pending). Install the agent on it, then press "Go live".');
+  }
+  async function setDnsStatus(sv: any, status: 'live' | 'off' | 'pending') {
+    const { error } = await supabase.rpc('admin_set_dns_server', { p_id: sv.id, p_status: status, p_capacity: null });
+    if (error) alert(error.message); else loadDnsServers();
+  }
+  async function deleteDnsServer(sv: any) {
+    if (!confirm(`Delete "${sv.name}"? Its customers move back to the main server.`)) return;
+    const { error } = await supabase.rpc('admin_delete_dns_server', { p_id: sv.id });
+    if (error) alert(error.message); else { loadDnsServers(); load(); }
+  }
+  async function copyDnsToken(sv: any) {
+    try { await navigator.clipboard.writeText(sv.install_token); alert('Token copied. Use it as the Bearer token for this server\'s agent. Do not share it.'); }
+    catch { alert('Could not copy automatically.'); }
+  }
+  async function moveCustomer() {
+    if (!moveFor) return;
+    const { error } = await supabase.rpc('admin_move_customer_server', { p_username: moveFor.username, p_server_id: moveTo || null });
+    if (error) { alert(error.message); return; }
+    alert('Customer moved. Ask them to open their link again and re-install the DNS settings.');
+    setMoveFor(null); setMoveTo(''); loadDnsServers();
   }
   async function loadServerStatus() {
     const { data } = await supabase.rpc('admin_server_status');
@@ -537,6 +587,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <button title="Download .ovpn" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
               <button title="Customer link (DNS)" onClick={() => makeLink(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
               <button title="Edit phone number" onClick={() => { setPhoneFor(a); setNewPhone('+' + a.username); }} className={`${ghost} !p-2`}><Pencil className="h-4 w-4" /></button>
+              {isAdmin && dnsServers.length > 1 && <button title="Move to another DNS server" onClick={() => { setMoveFor(a); setMoveTo(''); }} className={`${ghost} !p-2`}><Server className="h-4 w-4" /></button>}
               <button title="Renew (choose months)" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
               <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
               <button title="Delete" onClick={() => del(a)} className={`${ghost} !p-2 text-rose-500`}><Trash2 className="h-4 w-4" /></button></div></td>}
@@ -687,6 +738,32 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
                   </div>))}
               </div>);
             })()}
+            {isAdmin && (<div className={`${card} p-5 mt-6 space-y-3`}>
+              <div className="flex items-center gap-2"><Server className="h-5 w-5 text-indigo-500" /><b className="text-sm">DNS Servers</b></div>
+              <div className="text-[11px] text-[var(--mut)]">New customers get the server for their country automatically (by phone code). Add a server here, install the agent on it, then press Go live.</div>
+              {dnsServers.map((sv: any) => (
+                <div key={sv.id} className="rounded-xl bg-[var(--soft)] px-3.5 py-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <span><b>{sv.name}</b>{sv.is_primary ? ' · main' : ''} · {sv.country} · <span className="font-mono text-xs">{sv.ip}</span></span>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${sv.status === 'live' ? 'bg-emerald-500/15 text-emerald-600' : sv.status === 'off' ? 'bg-rose-500/15 text-rose-500' : 'bg-amber-500/15 text-amber-600'}`}>{sv.status}</span>
+                  </div>
+                  <div className="text-[11px] text-[var(--mut)]">{dnsLoad[sv.id] ?? 0} / {sv.capacity} customers · +{(sv.dial_codes || []).join(', +')}{sv.hostname ? ' · ' + sv.hostname : ''} · {sv.last_report_at ? 'last report ' + new Date(sv.last_report_at).toLocaleString() : 'no report yet'}</div>
+                  {!sv.is_primary && (<div className="flex flex-wrap gap-1.5">
+                    {sv.status !== 'live' && <button type="button" className={`${primary} !py-1.5 text-xs`} onClick={() => setDnsStatus(sv, 'live')}>Go live</button>}
+                    {sv.status === 'live' && <button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => setDnsStatus(sv, 'off')}>Turn off</button>}
+                    <button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => copyDnsToken(sv)}>Copy agent token</button>
+                    <button type="button" className={`${ghost} !py-1.5 text-xs text-rose-500`} onClick={() => deleteDnsServer(sv)}>Delete</button>
+                  </div>)}
+                </div>))}
+              <div className="grid grid-cols-2 gap-2">
+                <input className={inp} placeholder="Name (Saudi 1)" value={dsForm.name} onChange={(e) => setDsForm({ ...dsForm, name: e.target.value })} />
+                <input className={inp} placeholder="Server IPv4" value={dsForm.ip} onChange={(e) => setDsForm({ ...dsForm, ip: e.target.value })} />
+                <select className={inp} value={dsForm.country} onChange={(e) => setDsForm({ ...dsForm, country: e.target.value })}>{COUNTRIES.map((c) => <option key={c.id} value={c.id}>{c.n} +{c.cc}</option>)}</select>
+                <input className={inp} type="number" min={1} placeholder="Capacity" value={dsForm.capacity} onChange={(e) => setDsForm({ ...dsForm, capacity: Number(e.target.value) })} />
+                <input className={`${inp} col-span-2`} placeholder="Hostname (optional, e.g. dns2.mahehub.com)" value={dsForm.hostname} onChange={(e) => setDsForm({ ...dsForm, hostname: e.target.value })} />
+              </div>
+              <button type="button" disabled={dsBusy} className={`${primary} w-full disabled:opacity-60`} onClick={addDnsServer}>{dsBusy ? 'Adding…' : 'Add DNS server'}</button>
+            </div>)}
           </>)}
 
           {tab === 'users' && (<>
@@ -951,6 +1028,19 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
         </div>
       )}
 
+      {moveFor && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setMoveFor(null)}>
+          <div className={`${card} w-full max-w-sm p-5`} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3"><h3 className="text-lg font-black">Move to another server</h3><button onClick={() => setMoveFor(null)}><X className="h-5 w-5" /></button></div>
+            <div className="text-xs text-[var(--mut)] mb-3">Customer: {moveFor.username}. Only live servers are listed.</div>
+            <select className={inp} value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+              <option value="">Choose a server…</option>
+              {dnsServers.filter((x: any) => x.status === 'live').map((x: any) => <option key={x.id} value={x.id}>{x.name} · {x.country} ({dnsLoad[x.id] ?? 0}/{x.capacity})</option>)}
+            </select>
+            <button type="button" disabled={!moveTo} className={`${primary} w-full mt-4 disabled:opacity-60`} onClick={moveCustomer}>Move customer</button>
+          </div>
+        </div>
+      )}
       {phoneFor && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setPhoneFor(null)}>
           <div className={`${card} w-full max-w-sm p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
