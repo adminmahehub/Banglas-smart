@@ -512,6 +512,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
       try { const ctx = (rv.error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
       if (!confirm('The VPN server could not revoke this account (' + detail + '). Delete the account from the panel anyway?')) return;
     }
+    if (a.service !== 'vpn') { try { await supabase.functions.invoke('wg-provision', { body: { username: a.username, action: 'revoke' } }); } catch { /* the sync removes the peer anyway */ } }
     const { data: gone, error } = await supabase.from('vpn_accounts').delete().eq('id', a.id).select('id');
     if (error) { alert('Delete failed: ' + error.message); return; }
     if (!gone || gone.length === 0) { alert('Nothing was deleted. The database did not allow this delete for your account (permission rule). Send this message to your developer.'); return; }
@@ -532,8 +533,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     if (error) alert(error.message); else { alert('Saved'); load(); }
   }
 
-  const fetchProfile = async (a: OpenVpnAccount): Promise<string | null> => {
-    const { data, error } = await supabase.functions.invoke(provFn(a.username), { body: { username: a.username } });
+  const fetchProfile = async (a: OpenVpnAccount, forceWg = false): Promise<string | null> => {
+    const { data, error } = await supabase.functions.invoke(forceWg ? 'wg-provision' : provFn(a.username), { body: { username: a.username } });
     if (error || !data) {
       let detail = error?.message || 'the server is not responding';
       try { const ctx = (error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
@@ -541,12 +542,13 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     }
     return data instanceof Blob ? await data.text() : (typeof data === 'string' ? data : JSON.stringify(data));
   };
-  const copyConf = async (a: OpenVpnAccount) => { const text = await fetchProfile(a); if (text) flash('conf', text); };
-  const download = async (a: OpenVpnAccount) => {
-    const text = await fetchProfile(a);
+  const copyConf = async (a: OpenVpnAccount, forceWg = false) => { const text = await fetchProfile(a, forceWg); if (text) flash('conf-' + a.id, text); };
+  const download = async (a: OpenVpnAccount, forceWg = false) => {
+    const text = await fetchProfile(a, forceWg);
     if (text === null) return;
-    const wg = a.service === 'vpn';
-    const blob = new Blob([text], { type: wg ? 'text/plain' : 'application/x-openvpn-profile' });
+    const wg = forceWg || a.service === 'vpn';
+    // application/octet-stream: the phone saves it as a real .conf file instead of opening it as text (.conf.txt)
+    const blob = new Blob([text], { type: wg ? 'application/octet-stream' : 'application/x-openvpn-profile' });
     const url = URL.createObjectURL(blob);
     const el = document.createElement('a');
     el.href = url; el.download = wg ? `${a.username.slice(0, 15)}.conf` : `${a.username}.ovpn`; el.style.display = 'none';
@@ -608,12 +610,12 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${a.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : a.status === 'suspended' ? 'bg-amber-500/15 text-amber-600' : 'bg-rose-500/15 text-rose-500'}`}>{a.status}</span></td>
             <td className="px-4 py-3">{connBadge(a.username, a.status)}</td>
             {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
-              <button title="Import link / slip" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Copy className="h-4 w-4" /></button>
-              <button title="Download .ovpn" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
-              <button title="Customer link (DNS)" onClick={() => makeLink(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
-              <button title="Edit phone number" onClick={() => { setPhoneFor(a); setNewPhone('+' + a.username); }} className={`${ghost} !p-2`}><Pencil className="h-4 w-4" /></button>
+              <button title="1. Copy WireGuard config" onClick={() => copyConf(a, true)} className={`${ghost} !p-2`}>{copied === 'conf-' + a.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
+              <button title="2. Download WireGuard .conf" onClick={() => download(a, true)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
+              <button title="3. Copy DNS link (bKash)" onClick={() => makeLink(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
+              <button title="4. Edit phone number" onClick={() => { setPhoneFor(a); setNewPhone('+' + a.username); }} className={`${ghost} !p-2`}><Pencil className="h-4 w-4" /></button>
               {isAdmin && dnsServers.length > 1 && <button title="Move to another DNS server" onClick={() => { setMoveFor(a); setMoveTo(''); }} className={`${ghost} !p-2`}><Server className="h-4 w-4" /></button>}
-              <button title="Renew (choose months)" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
+              <button title="5. Renew (choose months)" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
               <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
               <button title="Delete" onClick={() => del(a)} className={`${ghost} !p-2 text-rose-500`}><Trash2 className="h-4 w-4" /></button></div></td>}
           </tr>))}
@@ -643,9 +645,9 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <td className="px-4 py-3 text-xs font-semibold">{a.expiryDate}</td>
               <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${a.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : a.status === 'suspended' ? 'bg-amber-500/15 text-amber-600' : 'bg-rose-500/15 text-rose-500'}`}>{a.status}</span></td>
               {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
-                <button title="Account details" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Copy className="h-4 w-4" /></button>
-                <button title="Download WireGuard .conf" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
-                <button title="Copy WireGuard config" onClick={() => copyConf(a)} className={`${ghost} !p-2`}>{copied === 'conf' ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}</button>
+                <button title="1. Copy WireGuard config" onClick={() => copyConf(a)} className={`${ghost} !p-2`}>{copied === 'conf-' + a.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
+                <button title="2. Download WireGuard .conf" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
+                <button title="Account details" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
                 <button title="Renew / add bandwidth" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
                 <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
                 <button title="Delete" onClick={() => del(a)} className={`${ghost} !p-2 text-rose-500`}><Trash2 className="h-4 w-4" /></button></div></td>}
@@ -1199,7 +1201,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             {((slip.service === 'vpn' ? [['Username', slip.username], ['Bandwidth', slip.bandwidthType === 'Limited' ? `${slip.bandwidthGb} GB` : 'Unlimited'], ['Expires', slip.expiryDate]] : [['Phone number', slip.username], ['Expires', slip.expiryDate], ['Import Link', slip.importLink]]) as [string, string][]).map(([k, v]) => (
               <div key={k} className="mb-2 flex items-center gap-2 rounded-xl bg-[var(--soft)] px-3.5 py-2.5"><div className="min-w-0 flex-1"><div className="text-[10px] font-bold uppercase text-[var(--mut)]">{k}</div><div className="truncate text-sm font-semibold">{v}</div></div>
                 <button className={`${ghost} !p-2`} onClick={() => flash(k, v)}>{copied === k ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>))}
-            {slip.service === 'vpn' && <div className="grid grid-cols-2 gap-2 mt-3"><button className={ghost} onClick={() => download(slip)}><Download className="h-4 w-4" />Download .conf</button><button className={ghost} onClick={() => copyConf(slip)}>{copied === 'conf' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy config</button></div>}
+            {slip.service === 'vpn' && <div className="grid grid-cols-2 gap-2 mt-3"><button className={ghost} onClick={() => download(slip)}><Download className="h-4 w-4" />Download .conf</button><button className={ghost} onClick={() => copyConf(slip)}>{copied === 'conf-' + slip.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy config</button></div>}
             <button className={`${primary} w-full mt-3`} onClick={() => flash('all', slip.service === 'vpn' ? `Username: ${slip.username}\nBandwidth: ${slip.bandwidthType === 'Limited' ? slip.bandwidthGb + ' GB' : 'Unlimited'}\nExpires: ${slip.expiryDate}` : `Phone: ${slip.username}\nExpires: ${slip.expiryDate}\nImport Link: ${slip.importLink}`)}>{copied === 'all' ? 'Copied!' : 'COPY ALL'}</button>
           </div>
         </div>
