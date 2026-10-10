@@ -5,6 +5,7 @@ import QrModal from '../../components/QrModal';
 const FN = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ssaqdsqopxclkplstpzj.supabase.co') + '/functions/v1';
 const BASE = FN + '/dns-portal';
 const WG = FN + '/dns-wg';
+const ACT = FN + '/dns-activate';
 const QR_THEME = { '--card': '#141c38', '--line': '#232c52', '--ink': '#eef1ff', '--mut': '#97a0c8', '--soft': '#1b2547' } as React.CSSProperties;
 
 type Info = {
@@ -26,6 +27,8 @@ export default function CustomerPage() {
   const [wgBusy, setWgBusy] = useState('');
   const [wgMsg, setWgMsg] = useState('');
   const [qr, setQr] = useState('');
+  const [auto, setAuto] = useState<'' | 'busy' | 'ok' | 'locked' | 'ipv6' | 'vpn_on' | 'expired' | 'error'>('');
+  const [autoIp, setAutoIp] = useState('');
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('t') || '';
@@ -38,6 +41,22 @@ export default function CustomerPage() {
       .catch(() => setInfo({ found: false }))
       .finally(() => setLoading(false));
   }, []);
+
+  // Activate the IP automatically as soon as the customer opens the link (no button needed).
+  useEffect(() => {
+    if (!token || !info?.found || !info.valid || info.blocked || act) return;
+    let off = false;
+    setAuto('busy');
+    fetch(`${ACT}?t=${encodeURIComponent(token)}`, { cache: 'no-store' })
+      .then((r) => r.json().catch(() => ({ ok: false, error: 'error' })))
+      .then((d) => {
+        if (off) return;
+        if (d?.ok) { setAuto('ok'); setAutoIp(d.ip || ''); setInfo((i) => (i ? { ...i, bound_ip: d.ip || i.bound_ip } : i)); }
+        else setAuto(d?.error === 'locked' ? 'locked' : d?.error === 'ipv6' ? 'ipv6' : d?.error === 'vpn_on' ? 'vpn_on' : d?.error === 'expired' ? 'expired' : 'error');
+      })
+      .catch(() => { if (!off) setAuto('error'); });
+    return () => { off = true; };
+  }, [token, info?.found, info?.valid, info?.blocked, act]);
 
   const copyHost = () => {
     try { navigator.clipboard?.writeText(info?.hostname || ''); } catch { /* ignore */ }
@@ -111,7 +130,7 @@ export default function CustomerPage() {
               <div className="mt-2 text-sm">Expires: <b>{info.expiry_date}</b> · {info.days_left} day(s) left</div>
               {info.bound_ip
                 ? <div className="mt-1 text-xs text-[#97a0c8]">Activated for IP: {info.bound_ip}</div>
-                : <div className="mt-1 text-xs text-amber-400">Not activated yet. Press “Activate my IP” below.</div>}
+                : <div className="mt-1 text-xs text-amber-400">{auto === 'busy' ? 'Activating your IP…' : 'Not activated yet. See step 3 below.'}</div>}
             </div>
 
             {act === 'locked' && (
@@ -143,8 +162,15 @@ export default function CustomerPage() {
 
                 <div className={card}>
                   <div className="mb-1 font-black">3. Activate my IP</div>
-                  <p className="mb-3 text-sm text-[#97a0c8]">Press this once while you are on the network you will use (Wi-Fi or mobile data). If your network changes, press it again. Only one network can be active at a time.</p>
-                  <a className={ghost} href={activateHref}>Activate my IP</a>
+                  {auto === 'busy' && <p className="text-sm text-[#97a0c8]">Activating your network automatically…</p>}
+                  {auto === 'ok' && <p className="text-sm text-emerald-400">✓ Activated automatically{autoIp ? ` for ${autoIp}` : ''}. If you change Wi-Fi or mobile data, just open this link again.</p>}
+                  {auto === 'vpn_on' && <p className="text-sm text-amber-400">WireGuard is switched on. Turn WireGuard off, then open this link again to activate your normal network.</p>}
+                  {auto === 'locked' && <p className="text-sm text-amber-400">This DNS is locked to another network. Please contact your seller to unlock it.</p>}
+                  {auto === 'expired' && <p className="text-sm text-amber-400">Your subscription is not active. Please contact your seller to renew.</p>}
+                  {(auto === '' || auto === 'ipv6' || auto === 'error') && (<>
+                    <p className="mb-3 text-sm text-[#97a0c8]">{auto === 'ipv6' || auto === 'error' ? 'Automatic activation did not work on this network. Press this button once while you are on the network you will use.' : 'Press this once while you are on the network you will use (Wi-Fi or mobile data). If your network changes, press it again.'}</p>
+                    <a className={ghost} href={activateHref}>Activate my IP</a>
+                  </>)}
                 </div>
 
                 <div className={card}>
