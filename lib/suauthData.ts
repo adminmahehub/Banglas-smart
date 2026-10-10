@@ -3,7 +3,7 @@ export interface CustomerAccount {
   userId: string; // Mobile number e.g. 8801968117694 (Unique key)
   username: string;
   token: string;
-  serviceType: 'Private DNS' | 'OpenVPN' | 'Combo (DNS + VPN)';
+  serviceType: 'Private DNS' | 'WireGuard VPN' | 'Combo (DNS + VPN)';
   platform: 'Android' | 'iOS (iPhone)' | 'Windows' | 'Router';
   dnsHostname: string;
   vpnProfileName: string;
@@ -68,7 +68,7 @@ export const INITIAL_CUSTOMERS: CustomerAccount[] = [
     userId: '8801829876543',
     username: 'tariq_dubai',
     token: 'TK-9q1xz4-7734',
-    serviceType: 'OpenVPN',
+    serviceType: 'WireGuard VPN',
     platform: 'Android',
     dnsHostname: 'tariq-2-9q1xz4.new2.mahehub.com',
     vpnProfileName: 'bd-ovpn-tariq.ovpn',
@@ -159,8 +159,8 @@ export interface CreditPackage {
   isPopular?: boolean;
 }
 
-// OpenVPN Account System (Exact replica of ovpns.online shown in Client Video)
-export interface OpenVpnAccount {
+// VPN / DNS account row used by the reseller panel
+export interface VpnAccount {
   id: string;
   username: string;
   password: string;
@@ -178,111 +178,6 @@ export interface OpenVpnAccount {
   multiServerFailover: string[];
   service?: 'dns' | 'vpn';
 }
-
-export const INITIAL_OPENVPN_ACCOUNTS: OpenVpnAccount[] = [
-  {
-    id: 'VPN-001',
-    username: 'Mobarok2',
-    password: 'Mobarok2',
-    server: 'bangladesh (only normal) (Migrated)',
-    serverHost: 'my.ovpn.ovh',
-    days: 30,
-    bandwidthType: 'Limited',
-    bandwidthGb: 20,
-    usedMb: 950.5,
-    totalPriceBdt: 80,
-    startDate: '2026-09-28',
-    expiryDate: '28 OCTOBER 2026',
-    status: 'active',
-    importLink: '/?view=user_import&user=Mobarok2',
-    multiServerFailover: ['103.145.118.24', '185.220.101.55', '45.148.12.80']
-  },
-  {
-    id: 'VPN-002',
-    username: 'babuvip1',
-    password: 'babuvip1',
-    server: 'vip server(Brilliant)',
-    serverHost: 'vip.ovpn.ovh',
-    days: 30,
-    bandwidthType: 'Limited',
-    bandwidthGb: 1,
-    usedMb: 175.7,
-    totalPriceBdt: 40,
-    startDate: '2026-08-16',
-    expiryDate: '16 SEPTEMBER 2026',
-    status: 'expired',
-    importLink: '/?view=user_import&user=babuvip1',
-    multiServerFailover: ['103.150.84.10', '185.220.101.55']
-  },
-  {
-    id: 'VPN-003',
-    username: 'sojibislam1',
-    password: 'sojib_pass99',
-    server: 'bangladesh (only normal) (Migrated)',
-    serverHost: 'my.ovpn.ovh',
-    days: 30,
-    bandwidthType: 'Limited',
-    bandwidthGb: 10,
-    usedMb: 632.0,
-    totalPriceBdt: 40,
-    startDate: '2026-09-11',
-    expiryDate: '11 OCTOBER 2026',
-    status: 'active',
-    importLink: '/?view=user_import&user=sojibislam1',
-    multiServerFailover: ['103.145.118.24', '45.148.12.80']
-  },
-  {
-    id: 'VPN-004',
-    username: 'saurav55',
-    password: 'saurav_pass88',
-    server: 'vip server(Brilliant)',
-    serverHost: 'vip.ovpn.ovh',
-    days: 30,
-    bandwidthType: 'Limited',
-    bandwidthGb: 5,
-    usedMb: 3.0,
-    totalPriceBdt: 50,
-    startDate: '2026-09-07',
-    expiryDate: '07 OCTOBER 2026',
-    status: 'active',
-    importLink: '/?view=user_import&user=saurav55',
-    multiServerFailover: ['103.150.84.10', '185.220.101.55']
-  },
-  {
-    id: 'VPN-005',
-    username: 'Habib1234',
-    password: 'habib_unlimited',
-    server: 'vip server(Brilliant)',
-    serverHost: 'vip.ovpn.ovh',
-    days: 30,
-    bandwidthType: 'Unlimited',
-    bandwidthGb: 0,
-    usedMb: 25200,
-    totalPriceBdt: 240,
-    startDate: '2026-09-10',
-    expiryDate: '10 OCTOBER 2026',
-    status: 'active',
-    importLink: '/?view=user_import&user=Habib1234',
-    multiServerFailover: ['103.150.84.10', '185.220.101.55', '45.148.12.80']
-  },
-  {
-    id: 'VPN-006',
-    username: 'jahangir123',
-    password: 'jahangir_secret',
-    server: 'bangladesh (only normal) (Migrated)',
-    serverHost: 'my.ovpn.ovh',
-    days: 30,
-    bandwidthType: 'Limited',
-    bandwidthGb: 1,
-    usedMb: 14.7,
-    totalPriceBdt: 40,
-    startDate: '2026-07-13',
-    expiryDate: '13 AUGUST 2026',
-    status: 'expired',
-    importLink: '/?view=user_import&user=jahangir123',
-    multiServerFailover: ['103.145.118.24']
-  }
-];
 
 export const CREDIT_PACKAGES: CreditPackage[] = [
   { id: 'PKG-10', credits: 10, priceBdt: 2000, discountTag: '৳200 / Credit (Standard)' },

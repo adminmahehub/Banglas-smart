@@ -24,7 +24,7 @@ export const MAHEHUB_SERVICES: ServiceItem[] = [
     id: 'premium-vpn',
     name: 'Premium VPN',
     category: 'Network',
-    description: 'High-speed encrypted WireGuard & OpenVPN tunnels with downloadable configuration profiles.',
+    description: 'High-speed encrypted WireGuard tunnels with downloadable configuration profiles.',
     badge: 'High Speed • 2 Devices',
     iconName: 'Shield',
     status: 'Active',
