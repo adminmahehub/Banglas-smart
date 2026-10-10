@@ -48,7 +48,16 @@ export default function CustomerPage() {
     setWgMsg('');
     try {
       const r = await fetch(`${WG}?t=${encodeURIComponent(token)}`, { cache: 'no-store' });
-      if (!r.ok) { setWgMsg(r.status === 403 ? 'Your subscription is not active.' : 'WireGuard is not ready right now. Please try again later or contact your seller.'); return null; }
+      if (!r.ok) {
+        let code = '';
+        try { code = (await r.json())?.error || ''; } catch { /* not JSON */ }
+        setWgMsg(
+          code === 'device_locked' ? 'This WireGuard config was locked because it was used on 2 or more devices. One account works on one phone only. Please contact your seller to unlock it.'
+          : r.status === 403 ? 'Your subscription is not active.'
+          : r.status === 404 ? 'This link was not found. Please ask your seller for a new link.'
+          : 'WireGuard is not ready right now. Please try again later or contact your seller.');
+        return null;
+      }
       return await r.text();
     } catch { setWgMsg('Could not connect. Please check your internet and try again.'); return null; }
   }
