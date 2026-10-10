@@ -2,11 +2,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Network, PlusCircle, Activity, KeyRound, UserCircle, LogOut, Search,
-  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone, ShieldCheck,
+  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone, ShieldCheck, QrCode,
 } from 'lucide-react';
 import type { OpenVpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
 import { COUNTRIES } from '../lib/countries';
+import QrModal from './QrModal';
 
 type Tab = 'dashboard' | 'users' | 'resellers' | 'credit' | 'site' | 'activity' | 'api' | 'profile';
 const NAV: { id: Tab; label: string; icon: any }[] = [
@@ -543,6 +544,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     return data instanceof Blob ? await data.text() : (typeof data === 'string' ? data : JSON.stringify(data));
   };
   const copyConf = async (a: OpenVpnAccount, forceWg = false) => { const text = await fetchProfile(a, forceWg); if (text) flash('conf-' + a.id, text); };
+  const [qr, setQr] = useState<{ title: string; text: string } | null>(null);
+  const showQr = async (a: OpenVpnAccount, forceWg = false) => { const text = await fetchProfile(a, forceWg); if (text) setQr({ title: a.username, text }); };
   const download = async (a: OpenVpnAccount, forceWg = false) => {
     const text = await fetchProfile(a, forceWg);
     if (text === null) return;
@@ -612,6 +615,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
               <button title="1. Copy WireGuard config" onClick={() => copyConf(a, true)} className={`${ghost} !p-2`}>{copied === 'conf-' + a.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
               <button title="2. Download WireGuard .conf" onClick={() => download(a, true)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
+              <button title="WireGuard QR code (customer scans it)" onClick={() => showQr(a, true)} className={`${ghost} !p-2`}><QrCode className="h-4 w-4" /></button>
               <button title="3. Copy DNS link (bKash)" onClick={() => makeLink(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
               <button title="4. Edit phone number" onClick={() => { setPhoneFor(a); setNewPhone('+' + a.username); }} className={`${ghost} !p-2`}><Pencil className="h-4 w-4" /></button>
               {isAdmin && dnsServers.length > 1 && <button title="Move to another DNS server" onClick={() => { setMoveFor(a); setMoveTo(''); }} className={`${ghost} !p-2`}><Server className="h-4 w-4" /></button>}
@@ -647,6 +651,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
                 <button title="1. Copy WireGuard config" onClick={() => copyConf(a)} className={`${ghost} !p-2`}>{copied === 'conf-' + a.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
                 <button title="2. Download WireGuard .conf" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
+                <button title="WireGuard QR code (customer scans it)" onClick={() => showQr(a)} className={`${ghost} !p-2`}><QrCode className="h-4 w-4" /></button>
                 <button title="Account details" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
                 <button title="Renew / add bandwidth" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
                 <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
@@ -1201,11 +1206,13 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             {((slip.service === 'vpn' ? [['Username', slip.username], ['Bandwidth', slip.bandwidthType === 'Limited' ? `${slip.bandwidthGb} GB` : 'Unlimited'], ['Expires', slip.expiryDate]] : [['Phone number', slip.username], ['Expires', slip.expiryDate], ['Import Link', slip.importLink]]) as [string, string][]).map(([k, v]) => (
               <div key={k} className="mb-2 flex items-center gap-2 rounded-xl bg-[var(--soft)] px-3.5 py-2.5"><div className="min-w-0 flex-1"><div className="text-[10px] font-bold uppercase text-[var(--mut)]">{k}</div><div className="truncate text-sm font-semibold">{v}</div></div>
                 <button className={`${ghost} !p-2`} onClick={() => flash(k, v)}>{copied === k ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>))}
-            {slip.service === 'vpn' && <div className="grid grid-cols-2 gap-2 mt-3"><button className={ghost} onClick={() => download(slip)}><Download className="h-4 w-4" />Download .conf</button><button className={ghost} onClick={() => copyConf(slip)}>{copied === 'conf-' + slip.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy config</button></div>}
+            {slip.service === 'vpn' && <div className="grid grid-cols-3 gap-2 mt-3"><button className={ghost} onClick={() => download(slip)}><Download className="h-4 w-4" />Download .conf</button><button className={ghost} onClick={() => showQr(slip)}><QrCode className="h-4 w-4" />QR</button><button className={ghost} onClick={() => copyConf(slip)}>{copied === 'conf-' + slip.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy config</button></div>}
             <button className={`${primary} w-full mt-3`} onClick={() => flash('all', slip.service === 'vpn' ? `Username: ${slip.username}\nBandwidth: ${slip.bandwidthType === 'Limited' ? slip.bandwidthGb + ' GB' : 'Unlimited'}\nExpires: ${slip.expiryDate}` : `Phone: ${slip.username}\nExpires: ${slip.expiryDate}\nImport Link: ${slip.importLink}`)}>{copied === 'all' ? 'Copied!' : 'COPY ALL'}</button>
           </div>
         </div>
       )}
+
+      {qr && <QrModal title={qr.title} text={qr.text} onClose={() => setQr(null)} style={dark ? DARK as any : LIGHT as any} />}
     </div>
   );
 }
