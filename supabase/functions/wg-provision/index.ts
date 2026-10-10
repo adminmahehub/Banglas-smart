@@ -1,6 +1,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 // Logged-in resellers/admin: download a WireGuard profile (.conf) or remove a peer.
+// Works for VPN accounts and for DNS (phone number) accounts: one credit gives both.
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -18,9 +19,9 @@ Deno.serve(async (req) => {
   if (!u.user) return bad("Login required", 401);
 
   const { username, action } = await req.json();
-  const { data: acc } = await sb.from("vpn_accounts").select("username,status,service,cert_name").eq("username", username).maybeSingle();
+  const { data: acc } = await sb.from("vpn_accounts").select("username,status,service,cert_name,expiry_date").eq("username", username).maybeSingle();
   if (!acc) return bad("Account not found", 404);
-  if (acc.service !== "vpn") return bad("This is not a VPN account", 400);
+  if (acc.service !== "vpn" && acc.service !== "dns") return bad("This account cannot use WireGuard", 400);
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const { data: cfg } = await admin.from("wg_config").select("api_url,api_token").eq("id", 1).maybeSingle();
@@ -42,7 +43,8 @@ Deno.serve(async (req) => {
       const r = await call("/revoke");
       return new Response(await r.text(), { status: r.status, headers: cors });
     }
-    if (acc.status !== "active") return bad("Account is not active", 403);
+    const today = new Date().toISOString().slice(0, 10);
+    if (acc.status !== "active" || (acc.expiry_date && String(acc.expiry_date) < today)) return bad("Account is not active", 403);
     const r = await call("/create");
     return new Response(await r.text(), {
       status: r.status,
