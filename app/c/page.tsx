@@ -1,7 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
+import QrModal from '../../components/QrModal';
 
-const BASE = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ssaqdsqopxclkplstpzj.supabase.co') + '/functions/v1/dns-portal';
+const FN = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ssaqdsqopxclkplstpzj.supabase.co') + '/functions/v1';
+const BASE = FN + '/dns-portal';
+const WG = FN + '/dns-wg';
+const QR_THEME = { '--card': '#141c38', '--line': '#232c52', '--ink': '#eef1ff', '--mut': '#97a0c8', '--soft': '#1b2547' } as React.CSSProperties;
 
 type Info = {
   found: boolean; valid?: boolean; status?: string; blocked?: boolean; phone_hint?: string;
@@ -19,6 +23,9 @@ export default function CustomerPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [act, setAct] = useState('');
+  const [wgBusy, setWgBusy] = useState('');
+  const [wgMsg, setWgMsg] = useState('');
+  const [qr, setQr] = useState('');
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('t') || '';
@@ -36,6 +43,33 @@ export default function CustomerPage() {
     try { navigator.clipboard?.writeText(info?.hostname || ''); } catch { /* ignore */ }
     setCopied(true); setTimeout(() => setCopied(false), 1500);
   };
+
+  async function wgConf(): Promise<string | null> {
+    setWgMsg('');
+    try {
+      const r = await fetch(`${WG}?t=${encodeURIComponent(token)}`, { cache: 'no-store' });
+      if (!r.ok) { setWgMsg(r.status === 403 ? 'Your subscription is not active.' : 'WireGuard is not ready right now. Please try again later or contact your seller.'); return null; }
+      return await r.text();
+    } catch { setWgMsg('Could not connect. Please check your internet and try again.'); return null; }
+  }
+  async function wgCopy() {
+    setWgBusy('copy'); const t = await wgConf(); setWgBusy('');
+    if (!t) return;
+    try { await navigator.clipboard.writeText(t); setWgMsg('Config copied. Open WireGuard → + → Create from text.'); } catch { setWgMsg('Could not copy. Use Download instead.'); }
+  }
+  async function wgDownload() {
+    setWgBusy('dl'); const t = await wgConf(); setWgBusy('');
+    if (!t) return;
+    const url = URL.createObjectURL(new Blob([t], { type: 'application/octet-stream' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'mahehub.conf'; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setWgMsg('Downloaded. Open the file with the WireGuard app.');
+  }
+  async function wgQr() {
+    setWgBusy('qr'); const t = await wgConf(); setWgBusy('');
+    if (t) setQr(t);
+  }
 
   const activateHref = info?.activate_url ? `${info.activate_url}&r=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : '')}` : '#';
 
@@ -103,11 +137,23 @@ export default function CustomerPage() {
                   <p className="mb-3 text-sm text-[#97a0c8]">Press this once while you are on the network you will use (Wi-Fi or mobile data). If your network changes, press it again. Only one network can be active at a time.</p>
                   <a className={ghost} href={activateHref}>Activate my IP</a>
                 </div>
+
+                <div className={card}>
+                  <div className="mb-1 font-black">4. WireGuard (full VPN)</div>
+                  <p className="mb-3 text-sm text-[#97a0c8]">Install the <b>WireGuard</b> app, then scan the QR code, import the file or paste the config. Keep this config private.</p>
+                  <div className="space-y-2">
+                    <button className={primary} disabled={!!wgBusy} onClick={wgQr}>{wgBusy === 'qr' ? 'Please wait…' : 'Show QR code'}</button>
+                    <button className={ghost} disabled={!!wgBusy} onClick={wgDownload}>{wgBusy === 'dl' ? 'Please wait…' : 'Download .conf file'}</button>
+                    <button className={ghost} disabled={!!wgBusy} onClick={wgCopy}>{wgBusy === 'copy' ? 'Please wait…' : 'Copy config text'}</button>
+                  </div>
+                  {wgMsg && <div className="mt-3 text-center text-xs text-amber-400">{wgMsg}</div>}
+                </div>
               </>
             )}
           </>
         )}
       </div>
+      {qr && <QrModal title={info?.phone_hint ? `•••• ${info.phone_hint}` : 'WireGuard'} text={qr} onClose={() => setQr('')} style={QR_THEME} />}
     </div>
   );
 }
