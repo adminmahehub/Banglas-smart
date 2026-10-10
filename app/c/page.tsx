@@ -29,8 +29,12 @@ export default function CustomerPage() {
   const [qr, setQr] = useState('');
   const [auto, setAuto] = useState<'' | 'busy' | 'ok' | 'locked' | 'ipv6' | 'vpn_on' | 'expired' | 'error'>('');
   const [autoIp, setAutoIp] = useState('');
+  const [plat, setPlat] = useState<'ios' | 'android' | 'other'>('other');
 
   useEffect(() => {
+    const ua = navigator.userAgent || '';
+    if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) setPlat('ios');
+    else if (/Android/i.test(ua)) setPlat('android');
     const t = new URLSearchParams(window.location.search).get('t') || '';
     setToken(t);
     setAct(new URLSearchParams(window.location.search).get('act') || '');
@@ -80,42 +84,48 @@ export default function CustomerPage() {
       return await r.text();
     } catch { setWgMsg('Could not connect. Please check your internet and try again.'); return null; }
   }
-  async function wgCopy() {
-    setWgBusy('copy'); const t = await wgConf(); setWgBusy('');
-    if (!t) return;
-    try { await navigator.clipboard.writeText(t); setWgMsg('Config copied. Open WireGuard → + → Create from text.'); } catch { setWgMsg('Could not copy. Use Download instead.'); }
-  }
-  // The WireGuard Android app registers this file type, so the downloaded .conf offers WireGuard to open it.
+  // The official WireGuard app on Android cannot be opened from a browser or a downloaded file: the customer has to
+  // import the file inside the app. So the file gets a short, valid tunnel name (letters, digits, - _ . only, max 15)
+  // that is different on every download. This avoids "File name already exists" and the "mahehub (2).conf" names.
   const WG_MIME = 'application/x-wireguard-profile';
-  function wgSaveFile(t: string) {
-    const url = URL.createObjectURL(new Blob([t], { type: WG_MIME }));
-    const a = document.createElement('a'); a.href = url; a.download = 'mahehub.conf'; a.style.display = 'none';
+  function wgFileName(): string {
+    const hint = String(info?.phone_hint || '').replace(/[^0-9A-Za-z]/g, '').slice(0, 6);
+    const rnd = Math.random().toString(36).slice(2, 5);
+    return `mh${hint}-${rnd}`.slice(0, 15);
+  }
+  function wgSaveFile(t: string, name: string) {
+    const url = URL.createObjectURL(new Blob([t], { type: 'application/octet-stream' }));
+    const a = document.createElement('a'); a.href = url; a.download = `${name}.conf`; a.style.display = 'none';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
   async function wgDownload() {
     setWgBusy('dl'); const t = await wgConf(); setWgBusy('');
     if (!t) return;
-    wgSaveFile(t);
-    setWgMsg('Downloaded. Tap the downloaded file and choose WireGuard, then tap Import / Allow.');
+    const name = wgFileName();
+    wgSaveFile(t, name);
+    setWgMsg(plat === 'ios'
+      ? `Saved as ${name}.conf. Open the WireGuard app → + → Create from file or archive → choose it.`
+      : `Downloaded as ${name}.conf. Now open WireGuard → tap + → Import from file or archive → open Downloads → choose ${name}.conf.`);
   }
-  // One tap: phone share sheet (pick WireGuard). If the phone cannot share files, the file is downloaded instead.
+  // iPhone: the phone share sheet lists WireGuard, which opens the config. If the phone cannot share files, it is downloaded instead.
   async function wgOpen() {
     setWgBusy('open'); const t = await wgConf(); setWgBusy('');
     if (!t) return;
+    const name = wgFileName();
     const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
     for (const type of [WG_MIME, 'text/plain']) {
       try {
-        const file = new File([t], 'mahehub.conf', { type });
+        const file = new File([t], `${name}.conf`, { type });
         if (nav.canShare && nav.canShare({ files: [file] })) {
           await nav.share({ files: [file], title: 'MaheHub WireGuard' });
-          setWgMsg('Choose WireGuard in the list, then tap Import / Allow.');
+          setWgMsg('Choose WireGuard in the list (swipe the app row left, or tap More), then tap Allow.');
           return;
         }
       } catch (e: any) { if (e?.name === 'AbortError') return; }
     }
-    wgSaveFile(t);
-    setWgMsg('Downloaded. Tap the downloaded file and choose WireGuard, then tap Import / Allow. (Or use Show QR code.)');
+    wgSaveFile(t, name);
+    setWgMsg(`Saved as ${name}.conf. Open the WireGuard app → + → Create from file or archive → choose it. (Or use Show QR code.)`);
   }
   async function wgQr() {
     setWgBusy('qr'); const t = await wgConf(); setWgBusy('');
@@ -198,12 +208,28 @@ export default function CustomerPage() {
 
                 <div className={card}>
                   <div className="mb-1 font-black">4. WireGuard (full VPN)</div>
-                  <p className="mb-3 text-sm text-[#97a0c8]">First install the <b>WireGuard</b> app from the Play Store or App Store. Then tap <b>Open in WireGuard</b> and confirm, or scan the QR code with the WireGuard app. Keep this config private.</p>
+                  {plat === 'ios' ? (
+                    <ol className="mb-3 list-decimal space-y-1 pl-5 text-sm text-[#97a0c8]">
+                      <li>Install the <b>WireGuard</b> app from the App Store.</li>
+                      <li>Tap <b>Open in WireGuard</b> below. In the list that opens, choose <b>WireGuard</b> (swipe the app row left or tap <b>More</b> if you do not see it).</li>
+                      <li>Tap <b>Allow</b>, confirm with Face ID or your passcode, then switch the tunnel on.</li>
+                    </ol>
+                  ) : (
+                    <ol className="mb-3 list-decimal space-y-1 pl-5 text-sm text-[#97a0c8]">
+                      <li>Install the <b>WireGuard</b> app from the Play Store.</li>
+                      <li>Tap <b>Download config file</b> below.</li>
+                      <li>Open WireGuard, tap <b>+</b>, then <b>Import from file or archive</b>.</li>
+                      <li>Open the <b>Downloads</b> folder (menu at the top left) and choose the file you just downloaded.</li>
+                      <li>Tap <b>Allow</b>, then switch the tunnel on.</li>
+                    </ol>
+                  )}
+                  <p className="mb-3 text-xs text-[#97a0c8]">WireGuard can also scan a QR code: show it on another phone or a computer, then in WireGuard tap + → Scan from QR code. Keep this config private. It works on one phone only.</p>
                   <div className="space-y-2">
-                    <button className={primary} disabled={!!wgBusy} onClick={wgOpen}>{wgBusy === 'open' ? 'Please wait…' : 'Open in WireGuard'}</button>
+                    {plat === 'ios'
+                      ? <button className={primary} disabled={!!wgBusy} onClick={wgOpen}>{wgBusy === 'open' ? 'Please wait…' : 'Open in WireGuard'}</button>
+                      : <button className={primary} disabled={!!wgBusy} onClick={wgDownload}>{wgBusy === 'dl' ? 'Please wait…' : 'Download config file'}</button>}
                     <button className={ghost} disabled={!!wgBusy} onClick={wgQr}>{wgBusy === 'qr' ? 'Please wait…' : 'Show QR code'}</button>
-                    <button className={ghost} disabled={!!wgBusy} onClick={wgDownload}>{wgBusy === 'dl' ? 'Please wait…' : 'Download .conf file'}</button>
-                    <button className={ghost} disabled={!!wgBusy} onClick={wgCopy}>{wgBusy === 'copy' ? 'Please wait…' : 'Copy config text'}</button>
+                    {plat === 'ios' && <button className={ghost} disabled={!!wgBusy} onClick={wgDownload}>{wgBusy === 'dl' ? 'Please wait…' : 'Save .conf file'}</button>}
                   </div>
                   {wgMsg && <div className="mt-3 text-center text-xs text-amber-400">{wgMsg}</div>}
                 </div>
