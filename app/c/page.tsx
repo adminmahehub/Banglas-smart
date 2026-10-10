@@ -85,14 +85,37 @@ export default function CustomerPage() {
     if (!t) return;
     try { await navigator.clipboard.writeText(t); setWgMsg('Config copied. Open WireGuard → + → Create from text.'); } catch { setWgMsg('Could not copy. Use Download instead.'); }
   }
-  async function wgDownload() {
-    setWgBusy('dl'); const t = await wgConf(); setWgBusy('');
-    if (!t) return;
-    const url = URL.createObjectURL(new Blob([t], { type: 'application/octet-stream' }));
+  // The WireGuard Android app registers this file type, so the downloaded .conf offers WireGuard to open it.
+  const WG_MIME = 'application/x-wireguard-profile';
+  function wgSaveFile(t: string) {
+    const url = URL.createObjectURL(new Blob([t], { type: WG_MIME }));
     const a = document.createElement('a'); a.href = url; a.download = 'mahehub.conf'; a.style.display = 'none';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    setWgMsg('Downloaded. Open the file with the WireGuard app.');
+  }
+  async function wgDownload() {
+    setWgBusy('dl'); const t = await wgConf(); setWgBusy('');
+    if (!t) return;
+    wgSaveFile(t);
+    setWgMsg('Downloaded. Tap the downloaded file and choose WireGuard, then tap Import / Allow.');
+  }
+  // One tap: phone share sheet (pick WireGuard). If the phone cannot share files, the file is downloaded instead.
+  async function wgOpen() {
+    setWgBusy('open'); const t = await wgConf(); setWgBusy('');
+    if (!t) return;
+    const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+    for (const type of [WG_MIME, 'text/plain']) {
+      try {
+        const file = new File([t], 'mahehub.conf', { type });
+        if (nav.canShare && nav.canShare({ files: [file] })) {
+          await nav.share({ files: [file], title: 'MaheHub WireGuard' });
+          setWgMsg('Choose WireGuard in the list, then tap Import / Allow.');
+          return;
+        }
+      } catch (e: any) { if (e?.name === 'AbortError') return; }
+    }
+    wgSaveFile(t);
+    setWgMsg('Downloaded. Tap the downloaded file and choose WireGuard, then tap Import / Allow. (Or use Show QR code.)');
   }
   async function wgQr() {
     setWgBusy('qr'); const t = await wgConf(); setWgBusy('');
@@ -175,9 +198,10 @@ export default function CustomerPage() {
 
                 <div className={card}>
                   <div className="mb-1 font-black">4. WireGuard (full VPN)</div>
-                  <p className="mb-3 text-sm text-[#97a0c8]">Install the <b>WireGuard</b> app, then scan the QR code, import the file or paste the config. Keep this config private.</p>
+                  <p className="mb-3 text-sm text-[#97a0c8]">First install the <b>WireGuard</b> app from the Play Store or App Store. Then tap <b>Open in WireGuard</b> and confirm, or scan the QR code with the WireGuard app. Keep this config private.</p>
                   <div className="space-y-2">
-                    <button className={primary} disabled={!!wgBusy} onClick={wgQr}>{wgBusy === 'qr' ? 'Please wait…' : 'Show QR code'}</button>
+                    <button className={primary} disabled={!!wgBusy} onClick={wgOpen}>{wgBusy === 'open' ? 'Please wait…' : 'Open in WireGuard'}</button>
+                    <button className={ghost} disabled={!!wgBusy} onClick={wgQr}>{wgBusy === 'qr' ? 'Please wait…' : 'Show QR code'}</button>
                     <button className={ghost} disabled={!!wgBusy} onClick={wgDownload}>{wgBusy === 'dl' ? 'Please wait…' : 'Download .conf file'}</button>
                     <button className={ghost} disabled={!!wgBusy} onClick={wgCopy}>{wgBusy === 'copy' ? 'Please wait…' : 'Copy config text'}</button>
                   </div>
