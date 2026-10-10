@@ -210,6 +210,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const modeAccounts = useMemo(() => accounts.filter((a) => (a.service || 'dns') === mode), [accounts, mode]);
   const list = useMemo(() => modeAccounts.filter((a) => a.username.toLowerCase().includes(q.toLowerCase())), [modeAccounts, q]);
   const active = modeAccounts.filter((a) => a.status === 'active').length;
+  const provFn = (username: string) => (accounts.find((x) => x.username === username)?.service === 'vpn' ? 'wg-provision' : 'vpn-provision');
   const switchMode = (m: 'dns' | 'vpn') => { setMode(m); setTab('dashboard'); setMenu(false); setQ(''); setErr(''); setModal(false); };
   useEffect(() => { if (user && isAdmin) supabase.rpc('admin_dashboard_stats', { p_service: mode }).then(({ data }) => setStats(data || null)); }, [mode]);
   const flash = (k: string, t: string) => { copy(t); setCopied(k); setTimeout(() => setCopied(''), 1200); };
@@ -442,7 +443,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setCleaning(true);
     let ok = 0; const failed: string[] = [];
     for (const r of rows) {
-      const rv = await supabase.functions.invoke('vpn-provision', { body: { username: r.username, action: 'revoke' } });
+      const rv = await supabase.functions.invoke(provFn(r.username), { body: { username: r.username, action: 'revoke' } });
       if (rv.error) { failed.push(r.username); continue; }
       const { data: gone, error } = await supabase.from('vpn_accounts').delete().eq('id', r.id).select('id');
       if (error || !gone || gone.length === 0) { failed.push(r.username); continue; }
@@ -493,7 +494,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     if (error) { alert('Update failed: ' + error.message); return; }
     if (!upd || upd.length === 0) { alert('Nothing was changed. The database did not allow this update for your account (permission rule). Send this message to your developer.'); return; }
     // on suspend/expired, also revoke the certificate on the server (the server retries every minute if this fails)
-    if (status !== 'active') {
+    if (status !== 'active' && provFn(username) === 'vpn-provision') {
       const rv = await supabase.functions.invoke('vpn-provision', { body: { username, action: 'revoke' } });
       if (rv.error) {
         let detail = rv.error.message;
@@ -505,7 +506,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   }
   async function del(a: OpenVpnAccount) {
     if (!confirm(`Delete ${a.username}?`)) return;
-    const rv = await supabase.functions.invoke('vpn-provision', { body: { username: a.username, action: 'revoke' } });
+    const rv = await supabase.functions.invoke(provFn(a.username), { body: { username: a.username, action: 'revoke' } });
     if (rv.error) {
       let detail = rv.error.message;
       try { const ctx = (rv.error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
@@ -531,18 +532,24 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     if (error) alert(error.message); else { alert('Saved'); load(); }
   }
 
-  const download = async (a: OpenVpnAccount) => {
-    const { data, error } = await supabase.functions.invoke('vpn-provision', { body: { username: a.username } });
+  const fetchProfile = async (a: OpenVpnAccount): Promise<string | null> => {
+    const { data, error } = await supabase.functions.invoke(provFn(a.username), { body: { username: a.username } });
     if (error || !data) {
       let detail = error?.message || 'the server is not responding';
       try { const ctx = (error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
-      alert('Could not create the profile: ' + detail); return;
+      alert('Could not create the profile: ' + detail); return null;
     }
-    const text = data instanceof Blob ? await data.text() : (typeof data === 'string' ? data : JSON.stringify(data));
-    const blob = new Blob([text], { type: 'application/x-openvpn-profile' });
+    return data instanceof Blob ? await data.text() : (typeof data === 'string' ? data : JSON.stringify(data));
+  };
+  const copyConf = async (a: OpenVpnAccount) => { const text = await fetchProfile(a); if (text) flash('conf', text); };
+  const download = async (a: OpenVpnAccount) => {
+    const text = await fetchProfile(a);
+    if (text === null) return;
+    const wg = a.service === 'vpn';
+    const blob = new Blob([text], { type: wg ? 'text/plain' : 'application/x-openvpn-profile' });
     const url = URL.createObjectURL(blob);
     const el = document.createElement('a');
-    el.href = url; el.download = `${a.username}.ovpn`; el.style.display = 'none';
+    el.href = url; el.download = wg ? `${a.username.slice(0, 15)}.conf` : `${a.username}.ovpn`; el.style.display = 'none';
     document.body.appendChild(el); el.click(); document.body.removeChild(el);
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   };
@@ -637,7 +644,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${a.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : a.status === 'suspended' ? 'bg-amber-500/15 text-amber-600' : 'bg-rose-500/15 text-rose-500'}`}>{a.status}</span></td>
               {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
                 <button title="Account details" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Copy className="h-4 w-4" /></button>
-                <button title="Download .ovpn" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
+                <button title="Download WireGuard .conf" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
+                <button title="Copy WireGuard config" onClick={() => copyConf(a)} className={`${ghost} !p-2`}>{copied === 'conf' ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}</button>
                 <button title="Renew / add bandwidth" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
                 <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
                 <button title="Delete" onClick={() => del(a)} className={`${ghost} !p-2 text-rose-500`}><Trash2 className="h-4 w-4" /></button></div></td>}
@@ -849,7 +857,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           </>)}
 
           {tab === 'users' && (<>
-            <Head t={mode === 'vpn' ? 'VPN Users' : 'Users'} s={mode === 'vpn' ? 'OpenVPN accounts with bandwidth' : 'Customers by phone number'}><button onClick={() => setModal(true)} className={primary}><UserPlus className="h-4 w-4" />Add User</button></Head>
+            <Head t={mode === 'vpn' ? 'VPN Users' : 'Users'} s={mode === 'vpn' ? 'WireGuard accounts with bandwidth' : 'Customers by phone number'}><button onClick={() => setModal(true)} className={primary}><UserPlus className="h-4 w-4" />Add User</button></Head>
             <div className="relative mb-4"><Search className="absolute left-3.5 top-3 h-4 w-4 text-[var(--mut)]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={mode === 'vpn' ? 'Search username…' : 'Search phone number…'} className={`${inp} pl-10`} /></div>
             <Reminders />
             <UsersTable rows={list} />
@@ -1071,7 +1079,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <select className={inp} value={vpnForm.months} onChange={(e) => setVpnForm({ ...vpnForm, months: Number(e.target.value) })}>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''}</option>)}</select>
               <select className={inp} value={vpnForm.bw} onChange={(e) => setVpnForm({ ...vpnForm, bw: e.target.value })}><option value="Unlimited">Unlimited bandwidth</option>{VPN_GB.map((g) => <option key={g} value={g}>{g} GB</option>)}</select>
               <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">{isAdmin ? 'Admin account: no credits are used' : 'Credits used (1 credit = 1 month)'}</span><b className="text-lg">{isAdmin ? 0 : vpnForm.months}</b></div>
-              <div className="text-xs text-[var(--mut)]">After Create you can download the .ovpn file and send it to the customer.</div>
+              <div className="text-xs text-[var(--mut)]">After Create you can download the WireGuard .conf file (or copy its text) and send it to the customer. The customer imports it in the free WireGuard app.</div>
               {err && <div className="text-sm font-semibold text-rose-500">{err}</div>}
               <button className={`${primary} w-full`} onClick={createVpn}>Create VPN account</button>
             </div>
@@ -1191,7 +1199,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
             {((slip.service === 'vpn' ? [['Username', slip.username], ['Bandwidth', slip.bandwidthType === 'Limited' ? `${slip.bandwidthGb} GB` : 'Unlimited'], ['Expires', slip.expiryDate]] : [['Phone number', slip.username], ['Expires', slip.expiryDate], ['Import Link', slip.importLink]]) as [string, string][]).map(([k, v]) => (
               <div key={k} className="mb-2 flex items-center gap-2 rounded-xl bg-[var(--soft)] px-3.5 py-2.5"><div className="min-w-0 flex-1"><div className="text-[10px] font-bold uppercase text-[var(--mut)]">{k}</div><div className="truncate text-sm font-semibold">{v}</div></div>
                 <button className={`${ghost} !p-2`} onClick={() => flash(k, v)}>{copied === k ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>))}
-            {slip.service === 'vpn' && <button className={`${ghost} w-full mt-3`} onClick={() => download(slip)}><Download className="h-4 w-4" />Download .ovpn file</button>}
+            {slip.service === 'vpn' && <div className="grid grid-cols-2 gap-2 mt-3"><button className={ghost} onClick={() => download(slip)}><Download className="h-4 w-4" />Download .conf</button><button className={ghost} onClick={() => copyConf(slip)}>{copied === 'conf' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy config</button></div>}
             <button className={`${primary} w-full mt-3`} onClick={() => flash('all', slip.service === 'vpn' ? `Username: ${slip.username}\nBandwidth: ${slip.bandwidthType === 'Limited' ? slip.bandwidthGb + ' GB' : 'Unlimited'}\nExpires: ${slip.expiryDate}` : `Phone: ${slip.username}\nExpires: ${slip.expiryDate}\nImport Link: ${slip.importLink}`)}>{copied === 'all' ? 'Copied!' : 'COPY ALL'}</button>
           </div>
         </div>
