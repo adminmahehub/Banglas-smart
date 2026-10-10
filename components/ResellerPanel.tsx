@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Network, PlusCircle, Activity, KeyRound, UserCircle, LogOut, Search,
   Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone, ShieldCheck, QrCode,
 } from 'lucide-react';
-import type { OpenVpnAccount } from '../lib/suauthData';
+import type { VpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
 import { COUNTRIES } from '../lib/countries';
 import QrModal from './QrModal';
@@ -28,7 +28,6 @@ const PRICE: Record<string, Record<string, number>> = {
 };
 const VPN_GB = ['10', '30', '50', '100', '200', '500'];
 const PER_CREDIT = 200; // 10 credits = ৳2000
-const HOST = { Normal: 'my.ovpn.ovh', VIP: 'vip.ovpn.ovh' } as const;
 const card = 'rounded-2xl bg-[var(--card)] border border-[var(--line)] shadow-[0_8px_30px_rgba(60,72,140,0.07)]';
 const inp = 'w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3.5 py-2.5 text-sm text-[var(--ink)] outline-none focus:border-indigo-400';
 const btn = 'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition active:scale-95';
@@ -50,16 +49,12 @@ async function shrinkImage(file: File): Promise<Blob> {
   } finally { URL.revokeObjectURL(url); }
 }
 function copy(t: string) { try { navigator.clipboard?.writeText(t); } catch { /* ignore */ } }
-function profile(a: OpenVpnAccount) {
-  const remotes = a.multiServerFailover.map((ip) => `remote ${ip} 1194`).join('\n');
-  return `# DEMO PROFILE - real certificate/server details will be added after servers are connected\nclient\ndev tun\nproto udp\n${remotes}\nremote-random\nresolv-retry infinite\nnobind\npersist-key\npersist-tun\nverb 3\n# user: ${a.username}\n`;
-}
 
 export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: () => void; onStorefront: () => void }) {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [dark, setDark] = useState(false);
   const [menu, setMenu] = useState(false);
-  const [accounts, setAccounts] = useState<OpenVpnAccount[]>([]);
+  const [accounts, setAccounts] = useState<VpnAccount[]>([]);
   const [mode, setMode] = useState<'dns' | 'vpn'>('dns');
   const [vpnForm, setVpnForm] = useState({ username: '', months: 1, bw: 'Unlimited' });
   const [user, setUser] = useState<any>(null);
@@ -80,12 +75,12 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [rsErr, setRsErr] = useState('');
   const [rsBusy, setRsBusy] = useState(false);
   const [rsDone, setRsDone] = useState<{ email: string; password: string; phone: string } | null>(null);
-  const [slip, setSlip] = useState<OpenVpnAccount | null>(null);
+  const [slip, setSlip] = useState<VpnAccount | null>(null);
   const [resellers, setResellers] = useState<any[]>([]);
   const [form, setForm] = useState({ country: 'BD', phone: '', months: 1 });
   const [trial, setTrial] = useState(false);
   const [notices, setNotices] = useState<any[]>([]);
-  const [renewFor, setRenewFor] = useState<OpenVpnAccount | null>(null);
+  const [renewFor, setRenewFor] = useState<VpnAccount | null>(null);
   const [dnsLink, setDnsLink] = useState<{ username: string; url: string } | null>(null);
   const [renewMonths, setRenewMonths] = useState(1);
   const [renewGb, setRenewGb] = useState(0);
@@ -117,7 +112,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [payAccounts, setPayAccounts] = useState<any[]>([]);
   const [payPick, setPayPick] = useState('');
   const [paForm, setPaForm] = useState({ id: '', method: 'bKash', kind: 'Personal', number: '' });
-  const [phoneFor, setPhoneFor] = useState<OpenVpnAccount | null>(null);
+  const [phoneFor, setPhoneFor] = useState<VpnAccount | null>(null);
   const [newPhone, setNewPhone] = useState('');
   const [servers, setServers] = useState<any[]>([]);
   const [srvStatus, setSrvStatus] = useState<any>(null);
@@ -125,7 +120,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [dnsLoad, setDnsLoad] = useState<Record<string, number>>({});
   const [dsForm, setDsForm] = useState({ name: '', country: 'SA', ip: '', capacity: 300, hostname: '' });
   const [dsBusy, setDsBusy] = useState(false);
-  const [moveFor, setMoveFor] = useState<OpenVpnAccount | null>(null);
+  const [moveFor, setMoveFor] = useState<VpnAccount | null>(null);
   const [moveTo, setMoveTo] = useState('');
   const [srvBusy, setSrvBusy] = useState('');
   const [inactive, setInactive] = useState<any[]>([]);
@@ -136,7 +131,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [team, setTeam] = useState<any[]>([]);
   const [live, setLive] = useState<Record<string, any>>({});
   const [refInfo, setRefInfo] = useState<{ code: string; direct_count: number; bonus_credits: number } | null>(null);
-  const toAcc = (r: any, pool: string[] = []): OpenVpnAccount => ({
+  const toAcc = (r: any, pool: string[] = []): VpnAccount => ({
     id: r.id, username: r.username, password: r.password, server: r.server_tier === 'VIP' ? 'VIP Brilliant' : 'Normal Dhaka',
     serverHost: r.server_host, days: r.days, bandwidthType: r.bandwidth_type, bandwidthGb: r.bandwidth_gb, usedMb: Number(r.used_mb),
     totalPriceBdt: Number(r.price_bdt), startDate: r.start_date,
@@ -211,7 +206,6 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const modeAccounts = useMemo(() => accounts.filter((a) => (a.service || 'dns') === mode), [accounts, mode]);
   const list = useMemo(() => modeAccounts.filter((a) => a.username.toLowerCase().includes(q.toLowerCase())), [modeAccounts, q]);
   const active = modeAccounts.filter((a) => a.status === 'active').length;
-  const provFn = (username: string) => (accounts.find((x) => x.username === username)?.service === 'vpn' ? 'wg-provision' : 'vpn-provision');
   const switchMode = (m: 'dns' | 'vpn') => { setMode(m); setTab('dashboard'); setMenu(false); setQ(''); setErr(''); setModal(false); };
   useEffect(() => { if (user && isAdmin) supabase.rpc('admin_dashboard_stats', { p_service: mode }).then(({ data }) => setStats(data || null)); }, [mode]);
   const flash = (k: string, t: string) => { copy(t); setCopied(k); setTimeout(() => setCopied(''), 1200); };
@@ -361,7 +355,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const { error } = await supabase.rpc('resolve_credit_request', { p_id: id, p_approve: ok });
     if (error) alert(error.message); else load();
   }
-  async function makeLink(a: OpenVpnAccount) {
+  async function makeLink(a: VpnAccount) {
     if (!confirm('Create a new customer link for ' + a.username + '? If a link was sent before, it will stop working.')) return;
     const { data, error } = await supabase.rpc('generate_customer_link', { p_username: a.username });
     if (error || !data) { alert('Could not create the link: ' + (error?.message || 'unknown error')); return; }
@@ -444,8 +438,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     setCleaning(true);
     let ok = 0; const failed: string[] = [];
     for (const r of rows) {
-      const rv = await supabase.functions.invoke(provFn(r.username), { body: { username: r.username, action: 'revoke' } });
-      if (rv.error) { failed.push(r.username); continue; }
+      try { await supabase.functions.invoke('wg-provision', { body: { username: r.username, action: 'revoke' } }); } catch { /* the sync removes the peer anyway */ }
       const { data: gone, error } = await supabase.from('vpn_accounts').delete().eq('id', r.id).select('id');
       if (error || !gone || gone.length === 0) { failed.push(r.username); continue; }
       ok++;
@@ -490,30 +483,25 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const { error } = await supabase.rpc('admin_set_coupon_active', { p_id: id, p_active: active });
     if (error) alert(error.message); else load();
   }
-  async function setStatus(id: string, status: OpenVpnAccount['status'], username: string) {
+  async function setStatus(id: string, status: VpnAccount['status'], username: string) {
     const { data: upd, error } = await supabase.from('vpn_accounts').update({ status }).eq('id', id).select('id');
     if (error) { alert('Update failed: ' + error.message); return; }
     if (!upd || upd.length === 0) { alert('Nothing was changed. The database did not allow this update for your account (permission rule). Send this message to your developer.'); return; }
-    // on suspend/expired, also revoke the certificate on the server (the server retries every minute if this fails)
-    if (status !== 'active' && provFn(username) === 'vpn-provision') {
-      const rv = await supabase.functions.invoke('vpn-provision', { body: { username, action: 'revoke' } });
+    // WireGuard peers of suspended/expired accounts are removed by the server sync (wg-sync)
+    load();
+  }
+  async function del(a: VpnAccount) {
+    if (!confirm(`Delete ${a.username}?`)) return;
+    if (a.service === 'vpn') {
+      const rv = await supabase.functions.invoke('wg-provision', { body: { username: a.username, action: 'revoke' } });
       if (rv.error) {
         let detail = rv.error.message;
         try { const ctx = (rv.error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
-        alert('Status saved, but the server certificate could not be revoked yet (it will retry automatically). Details: ' + detail);
+        if (!confirm('The VPN server could not revoke this account (' + detail + '). Delete the account from the panel anyway?')) return;
       }
+    } else {
+      try { await supabase.functions.invoke('wg-provision', { body: { username: a.username, action: 'revoke' } }); } catch { /* the sync removes the peer anyway */ }
     }
-    load();
-  }
-  async function del(a: OpenVpnAccount) {
-    if (!confirm(`Delete ${a.username}?`)) return;
-    const rv = await supabase.functions.invoke(provFn(a.username), { body: { username: a.username, action: 'revoke' } });
-    if (rv.error) {
-      let detail = rv.error.message;
-      try { const ctx = (rv.error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
-      if (!confirm('The VPN server could not revoke this account (' + detail + '). Delete the account from the panel anyway?')) return;
-    }
-    if (a.service !== 'vpn') { try { await supabase.functions.invoke('wg-provision', { body: { username: a.username, action: 'revoke' } }); } catch { /* the sync removes the peer anyway */ } }
     const { data: gone, error } = await supabase.from('vpn_accounts').delete().eq('id', a.id).select('id');
     if (error) { alert('Delete failed: ' + error.message); return; }
     if (!gone || gone.length === 0) { alert('Nothing was deleted. The database did not allow this delete for your account (permission rule). Send this message to your developer.'); return; }
@@ -534,8 +522,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     if (error) alert(error.message); else { alert('Saved'); load(); }
   }
 
-  const fetchProfile = async (a: OpenVpnAccount, forceWg = false): Promise<string | null> => {
-    const { data, error } = await supabase.functions.invoke(forceWg ? 'wg-provision' : provFn(a.username), { body: { username: a.username } });
+  const fetchProfile = async (a: VpnAccount, forceWg = false): Promise<string | null> => {
+    const { data, error } = await supabase.functions.invoke('wg-provision', { body: { username: a.username } });
     if (error || !data) {
       let detail = error?.message || 'the server is not responding';
       try { const ctx = (error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
@@ -543,18 +531,17 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     }
     return data instanceof Blob ? await data.text() : (typeof data === 'string' ? data : JSON.stringify(data));
   };
-  const copyConf = async (a: OpenVpnAccount, forceWg = false) => { const text = await fetchProfile(a, forceWg); if (text) flash('conf-' + a.id, text); };
+  const copyConf = async (a: VpnAccount, forceWg = false) => { const text = await fetchProfile(a, forceWg); if (text) flash('conf-' + a.id, text); };
   const [qr, setQr] = useState<{ title: string; text: string } | null>(null);
-  const showQr = async (a: OpenVpnAccount, forceWg = false) => { const text = await fetchProfile(a, forceWg); if (text) setQr({ title: a.username, text }); };
-  const download = async (a: OpenVpnAccount, forceWg = false) => {
+  const showQr = async (a: VpnAccount, forceWg = false) => { const text = await fetchProfile(a, forceWg); if (text) setQr({ title: a.username, text }); };
+  const download = async (a: VpnAccount, forceWg = false) => {
     const text = await fetchProfile(a, forceWg);
     if (text === null) return;
-    const wg = forceWg || a.service === 'vpn';
     // application/octet-stream: the phone saves it as a real .conf file instead of opening it as text (.conf.txt)
-    const blob = new Blob([text], { type: wg ? 'application/octet-stream' : 'application/x-openvpn-profile' });
+    const blob = new Blob([text], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const el = document.createElement('a');
-    el.href = url; el.download = wg ? `${a.username.slice(0, 15)}.conf` : `${a.username}.ovpn`; el.style.display = 'none';
+    el.href = url; el.download = `${a.username.slice(0, 15)}.conf`; el.style.display = 'none';
     document.body.appendChild(el); el.click(); document.body.removeChild(el);
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   };
@@ -599,7 +586,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     else { t = `Activated${l.bound_at ? ' · ' + ago(l.bound_at) : ''}, not seen yet`; c = 'bg-amber-500/15 text-amber-600'; }
     return <div><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${c}`}>{t}</span>{l?.bound_ip && status === 'active' && <div className="mt-1 text-[10px] text-[var(--mut)] font-mono">{l.bound_ip}{l.trial ? ' · trial' : ''}</div>}</div>;
   };
-  const DnsUsersTable = ({ rows, compact }: { rows: OpenVpnAccount[]; compact?: boolean }) => (
+  const DnsUsersTable = ({ rows, compact }: { rows: VpnAccount[]; compact?: boolean }) => (
     <div className={`${card} overflow-hidden`}>
       <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
         <thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">
@@ -628,7 +615,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     </div>
   );
 
-  const VpnUsersTable = ({ rows, compact }: { rows: OpenVpnAccount[]; compact?: boolean }) => (
+  const VpnUsersTable = ({ rows, compact }: { rows: VpnAccount[]; compact?: boolean }) => (
     <div className={`${card} overflow-hidden`}>
       <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm">
         <thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">
@@ -662,7 +649,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
         </tbody></table></div>
     </div>
   );
-  const UsersTable = (props: { rows: OpenVpnAccount[]; compact?: boolean }) => (mode === 'vpn' ? VpnUsersTable(props) : DnsUsersTable(props));
+  const UsersTable = (props: { rows: VpnAccount[]; compact?: boolean }) => (mode === 'vpn' ? VpnUsersTable(props) : DnsUsersTable(props));
 
   const themeVars = (dark ? DARK : LIGHT) as any;
   if (!ready) return <div style={themeVars} className="min-h-screen grid place-items-center bg-[var(--bg)] text-[var(--mut)]">Loading…</div>;
@@ -1050,7 +1037,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           {tab === 'api' && (<><Head t="API" s="Reseller API (design preview)" />
             <div className={`${card} p-5 mb-4`}><div className="text-xs font-bold text-[var(--mut)] mb-2">API KEY</div>
               <div className="flex gap-2"><input readOnly value="demo-key-xxxx-xxxx-xxxx" className={inp} /><button className={ghost} onClick={() => flash('k', 'demo-key-xxxx-xxxx-xxxx')}>{copied === 'k' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div></div>
-            <div className={`${card} divide-y divide-[var(--line)] font-mono text-xs`}>{['POST /v1/openvpn/provision', 'POST /v1/openvpn/renew', 'POST /v1/openvpn/suspend', 'GET  /v1/openvpn/usage'].map((e) => <div key={e} className="px-5 py-3.5">{e}</div>)}</div>
+            <div className={`${card} divide-y divide-[var(--line)] font-mono text-xs`}>{['POST /v1/vpn/provision', 'POST /v1/vpn/renew', 'POST /v1/vpn/suspend', 'GET  /v1/vpn/usage'].map((e) => <div key={e} className="px-5 py-3.5">{e}</div>)}</div>
             <p className="mt-3 text-xs text-[var(--mut)]">These endpoints are design-only for now and will be built once the server is connected.</p></>)}
 
           {tab === 'profile' && (<><Head t="User Profile" s={user?.email} />
