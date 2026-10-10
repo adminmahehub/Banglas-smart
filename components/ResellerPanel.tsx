@@ -139,6 +139,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     status: r.status, importLink: `${window.location.origin}/?view=user_import&user=${encodeURIComponent(r.username)}`,
     multiServerFailover: pool.length ? pool : (r.server_host ? [r.server_host] : []),
     service: r.service === 'vpn' ? 'vpn' : 'dns',
+    wgLocked: !!r.wg_locked, wgSeen: r.wg_last_handshake ?? null, wgNote: r.wg_lock_note ?? null,
   });
   const load = async () => {
     const [p, v, a] = await Promise.all([
@@ -572,6 +573,27 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     </div>
   );
 
+  async function clearWgLock(a: VpnAccount) {
+    if (!confirm(`Clear the device lock for ${a.username}?\nThe old WireGuard config stops working and a NEW config is issued on the next download. Send the new config only to the customer.`)) return;
+    const { error } = await supabase.functions.invoke('wg-provision', { body: { username: a.username, action: 'reset' } });
+    if (error) {
+      let detail = error.message;
+      try { const ctx = (error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
+      alert('Could not clear the lock: ' + detail); return;
+    }
+    alert('Lock cleared. Download a new WireGuard config for this customer.'); load();
+  }
+  const wgBadge = (a: VpnAccount) => {
+    const ago = (t: string) => { const m = Math.max(0, Math.round((Date.now() - new Date(t).getTime()) / 60000)); return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
+    if (a.wgLocked) return (
+      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        <span title={a.wgNote || ''} className="rounded-full bg-rose-500/15 px-2.5 py-1 text-[11px] font-bold text-rose-500">🔒 Locked: 2+ devices</span>
+        {isAdmin && <button type="button" className={`${ghost} !px-2 !py-1 text-[11px]`} onClick={() => clearWgLock(a)}>Clear lock</button>}
+      </div>);
+    if (!a.wgSeen) return null;
+    const online = Date.now() - new Date(a.wgSeen).getTime() < 3 * 60000;
+    return <div className="mt-1"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${online ? 'bg-emerald-500/15 text-emerald-600' : 'bg-sky-500/15 text-sky-600'}`}>WG {online ? 'online now' : 'last seen ' + ago(a.wgSeen)}</span></div>;
+  };
   const connBadge = (u: string, status: string) => {
     const l = live[u];
     const ago = (t: string) => { const m = Math.max(0, Math.round((Date.now() - new Date(t).getTime()) / 60000)); return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
@@ -594,7 +616,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
         </tr></thead>
         <tbody>{rows.map((a) => (
           <tr key={a.id} className="border-t border-[var(--line)] text-[var(--ink)]">
-            <td className="px-4 py-3"><div className="font-bold">{a.username}</div></td>
+            <td className="px-4 py-3"><div className="font-bold">{a.username}</div>{wgBadge(a)}</td>
             <td className="px-4 py-3 text-xs font-semibold">{a.startDate ? new Date(a.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</td>
             <td className="px-4 py-3 text-xs font-semibold">{a.expiryDate}</td>
             <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${a.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : a.status === 'suspended' ? 'bg-amber-500/15 text-amber-600' : 'bg-rose-500/15 text-rose-500'}`}>{a.status}</span></td>
@@ -627,7 +649,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
           const pct = limited ? Math.min(100, (usedGb / a.bandwidthGb) * 100) : 0;
           return (
             <tr key={a.id} className="border-t border-[var(--line)] text-[var(--ink)]">
-              <td className="px-4 py-3"><div className="font-bold">{a.username}</div></td>
+              <td className="px-4 py-3"><div className="font-bold">{a.username}</div>{wgBadge(a)}</td>
               <td className="px-4 py-3 min-w-[170px]">
                 <div className="text-xs font-semibold">{limited ? `${usedGb.toFixed(2)} / ${a.bandwidthGb} GB` : `${usedGb.toFixed(2)} GB used · Unlimited`}</div>
                 {limited && <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--soft)]"><div className={`h-1.5 rounded-full ${pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} /></div>}
