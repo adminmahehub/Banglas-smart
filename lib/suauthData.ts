@@ -162,6 +162,9 @@ export interface CreditPackage {
 // VPN / DNS account row used by the reseller panel
 export interface VpnAccount {
   id: string;
+  wgLocked?: boolean;
+  wgSeen?: string | null;
+  wgNote?: string | null;
   username: string;
   password: string;
   server: string;
