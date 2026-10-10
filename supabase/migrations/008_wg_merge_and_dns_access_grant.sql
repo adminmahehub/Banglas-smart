@@ -1,0 +1,4 @@
+-- Already applied on Supabase:
+--  * wg_sync_merge_dns_and_device_lock : wg_sync(p_usage, p_seen, p_shared) handles DNS accounts + device lock together
+--  * grant_service_role_dns_access_select : service_role may SELECT public.dns_access (dns-wg / dns-portal read it directly)
+-- Edge functions: wg-provision v4 (VPN + DNS accounts, lock check, admin reset), dns-wg v2 (refuses locked accounts).
