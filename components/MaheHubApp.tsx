@@ -1045,7 +1045,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 <h1 className={`text-3xl sm:text-5xl md:text-6xl font-black tracking-tight leading-tight ${
                   theme === 'dark' ? 'text-white' : 'text-slate-900'
                 }`}>
-                  {customerHome && site.store_headline ? site.store_headline : (<>
+                  {(customerHome ? site.store_headline : site.reseller_headline) ? (customerHome ? site.store_headline : site.reseller_headline) : (<>
                   Fast • Secure • Private <br className="hidden sm:block" />
                   <span className="bg-gradient-to-r from-cyan-500 via-teal-500 to-emerald-500 bg-clip-text text-transparent">
                     Smart DNS Unblocker
@@ -1055,7 +1055,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 <p className={`text-sm sm:text-base md:text-lg max-w-2xl mx-auto leading-relaxed ${
                   theme === 'dark' ? 'text-slate-300' : 'text-slate-700 font-medium'
                 }`}>
-                  {customerHome && site.store_subline ? site.store_subline : (<>সৌদি আরব, মালয়েশিয়া ও মধ্যপ্রাচ্য প্রবাসীদের জন্য কোনো ভিপিএন অ্যাপ ছাড়াই <strong>bKash, Nagad, Rocket, Upay, Alaap, Brilliant ও WhatsApp Calling</strong> সম্পূর্ণ দেশীয় স্পিডে ব্যবহার করুন।</>)}
+                  {(customerHome ? site.store_subline : site.reseller_subline) ? (customerHome ? site.store_subline : site.reseller_subline) : (<>সৌদি আরব, মালয়েশিয়া ও মধ্যপ্রাচ্য প্রবাসীদের জন্য কোনো ভিপিএন অ্যাপ ছাড়াই <strong>bKash, Nagad, Rocket, Upay, Alaap, Brilliant ও WhatsApp Calling</strong> সম্পূর্ণ দেশীয় স্পিডে ব্যবহার করুন।</>)}
                 </p>
               </div>
 
@@ -1315,9 +1315,9 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
               </h2>
             </div>
 
-            {customerHome ? (
+            {(customerHome || parsePlans(site.reseller_plans).length > 0) ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-left">
-              {parsePlans(site.store_plans).map((p) => (
+              {parsePlans(customerHome ? site.store_plans : site.reseller_plans).map((p) => (
                 <div key={p.label} className={`rounded-3xl p-6 border flex flex-col justify-between space-y-4 transition-all relative ${
                   p.hot ? (theme === 'dark' ? 'bg-gradient-to-b from-[#16234b] to-[#0c142b] border-2 border-cyan-400/80 shadow-2xl' : 'bg-cyan-50/50 border-2 border-cyan-500 shadow-cyan-100')
                         : (theme === 'dark' ? 'bg-[#0f172f] border-slate-800' : 'bg-white border-slate-200 shadow-sm')
@@ -1443,8 +1443,8 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
               </div>
             </div>
             )}
-            {customerHome && site.store_note && (
-              <p className={`text-xs max-w-xl mx-auto ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{site.store_note}</p>
+            {(customerHome ? site.store_note : site.reseller_note) && (
+              <p className={`text-xs max-w-xl mx-auto ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{customerHome ? site.store_note : site.reseller_note}</p>
             )}
           </section>
 

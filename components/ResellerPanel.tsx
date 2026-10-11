@@ -99,8 +99,9 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
   const [reqCredits, setReqCredits] = useState<number>(10);
   const [trx, setTrx] = useState('');
   const [siteCfg, setSiteCfg] = useState<Record<string, string>>({});
-  const [siteForm, setSiteForm] = useState({ support_whatsapp_bd: '', support_whatsapp_my: '', support_email: '', facebook_url: '', telegram_url: '', store_headline: '', store_subline: '', store_note: '' });
+  const [siteForm, setSiteForm] = useState({ support_whatsapp_bd: '', support_whatsapp_my: '', support_email: '', facebook_url: '', telegram_url: '', store_headline: '', store_subline: '', store_note: '', reseller_headline: '', reseller_subline: '', reseller_note: '' });
   const [planRows, setPlanRows] = useState<{ label: string; price: string; note: string; hot: boolean }[]>([]);
+  const [resPlanRows, setResPlanRows] = useState<{ label: string; price: string; note: string; hot: boolean }[]>([]);
   const [annList, setAnnList] = useState<any[]>([]);
   const [allNotices, setAllNotices] = useState<any[]>([]);
   const [nForm, setNForm] = useState({ kind: 'notice', title: '', body: '', days: '0' });
@@ -177,8 +178,9 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
     const st = await supabase.from('app_settings').select('key,value');
     const sm: Record<string, string> = {}; (st.data || []).forEach((x: any) => { sm[x.key] = x.value; });
     setSiteCfg(sm);
-    setSiteForm({ support_whatsapp_bd: sm.support_whatsapp_bd || '', support_whatsapp_my: sm.support_whatsapp_my || '', support_email: sm.support_email || '', facebook_url: sm.facebook_url || '', telegram_url: sm.telegram_url || '', store_headline: sm.store_headline || '', store_subline: sm.store_subline || '', store_note: sm.store_note || '' });
+    setSiteForm({ support_whatsapp_bd: sm.support_whatsapp_bd || '', support_whatsapp_my: sm.support_whatsapp_my || '', support_email: sm.support_email || '', facebook_url: sm.facebook_url || '', telegram_url: sm.telegram_url || '', store_headline: sm.store_headline || '', store_subline: sm.store_subline || '', store_note: sm.store_note || '', reseller_headline: sm.reseller_headline || '', reseller_subline: sm.reseller_subline || '', reseller_note: sm.reseller_note || '' });
     setPlanRows(parsePlans(sm.store_plans).map((p) => ({ label: p.label, price: p.price, note: p.note || '', hot: !!p.hot })));
+    setResPlanRows(parsePlans(sm.reseller_plans).map((p) => ({ label: p.label, price: p.price, note: p.note || '', hot: !!p.hot })));
     setPay({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: Number(sm.price_per_credit) || PER_CREDIT });
     setPayEdit({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: String(Number(sm.price_per_credit) || PER_CREDIT) });
     const pa = await supabase.from('payment_accounts').select('*').order('created_at', { ascending: true });
@@ -304,6 +306,15 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
       if (error) { alert(error.message); return; }
     }
     alert('Saved. The customer home page now shows the new rates and text.'); load();
+  }
+  async function saveResellerHome() {
+    const rows = resPlanRows.filter((r) => r.label.trim() && r.price.trim()).map((r) => ({ label: r.label.trim(), price: r.price.trim(), note: r.note.trim(), hot: r.hot }));
+    for (const [k, v] of [['reseller_headline', siteForm.reseller_headline], ['reseller_subline', siteForm.reseller_subline], ['reseller_note', siteForm.reseller_note], ['reseller_plans', JSON.stringify(rows)]] as const) {
+      if ((v || '') === (siteCfg[k] || '') || (k === 'reseller_plans' && rows.length === 0 && !siteCfg[k])) continue;
+      const { error } = await supabase.rpc('admin_set_setting', { p_key: k, p_value: k === 'reseller_plans' && rows.length === 0 ? '' : v });
+      if (error) { alert(error.message); return; }
+    }
+    alert('Saved. The reseller home page now shows the new rates and text.'); load();
   }
   async function saveNotice() {
     const { error } = await supabase.rpc('admin_save_announcement', { p_id: null, p_kind: nForm.kind, p_title: nForm.title, p_body: nForm.body, p_active: true, p_days: Math.floor(Number(nForm.days) || 0) });
@@ -1071,6 +1082,28 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
               <label className="text-xs font-bold text-[var(--mut)]">Note under the rates (optional)</label>
               <input className={inp} value={siteForm.store_note} onChange={(e) => setSiteForm({ ...siteForm, store_note: e.target.value })} placeholder="e.g. Pay by bKash or Nagad, then send the screenshot on WhatsApp" />
               <button type="button" className={`${primary} w-full`} onClick={saveStore}>Save customer home page</button>
+            </div>
+            <div className={`${card} p-5 mb-6 space-y-3`}>
+              <div className="font-black">Reseller home page (rates and text)</div>
+              <div className="text-xs text-[var(--mut)]">This is what resellers see on the reseller page (before they log in). Leave the rates empty to show the standard reseller rates. Write prices exactly as you want them shown.</div>
+              <label className="text-xs font-bold text-[var(--mut)]">Headline</label>
+              <input className={inp} value={siteForm.reseller_headline} onChange={(e) => setSiteForm({ ...siteForm, reseller_headline: e.target.value })} placeholder="Become a MaheHub reseller" />
+              <label className="text-xs font-bold text-[var(--mut)]">Short description</label>
+              <textarea className={`${inp} min-h-[70px]`} value={siteForm.reseller_subline} onChange={(e) => setSiteForm({ ...siteForm, reseller_subline: e.target.value })} />
+              <label className="text-xs font-bold text-[var(--mut)]">Reseller rates (up to 8)</label>
+              {resPlanRows.map((r, i) => (
+                <div key={i} className="grid grid-cols-2 gap-2 rounded-xl border border-[var(--line)] p-2.5">
+                  <input className={inp} value={r.label} onChange={(e) => setResPlanRows(resPlanRows.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} placeholder="Name (100 credits)" />
+                  <input className={inp} value={r.price} onChange={(e) => setResPlanRows(resPlanRows.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} placeholder="Price (৳20,000)" />
+                  <input className={`${inp} col-span-2`} value={r.note} onChange={(e) => setResPlanRows(resPlanRows.map((x, j) => j === i ? { ...x, note: e.target.value } : x))} placeholder="Small note (optional)" />
+                  <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={r.hot} onChange={(e) => setResPlanRows(resPlanRows.map((x, j) => j === i ? { ...x, hot: e.target.checked } : x))} />Most popular</label>
+                  <button type="button" className={`${ghost} !py-1.5 text-xs text-rose-500`} onClick={() => setResPlanRows(resPlanRows.filter((_, j) => j !== i))}>Remove</button>
+                </div>
+              ))}
+              {resPlanRows.length < 8 && <button type="button" className={`${ghost} w-full text-xs`} onClick={() => setResPlanRows([...resPlanRows, { label: '', price: '', note: '', hot: false }])}>+ Add a rate</button>}
+              <label className="text-xs font-bold text-[var(--mut)]">Note under the rates (optional)</label>
+              <input className={inp} value={siteForm.reseller_note} onChange={(e) => setSiteForm({ ...siteForm, reseller_note: e.target.value })} placeholder="e.g. Buy credit from the admin and get a bigger discount" />
+              <button type="button" className={`${primary} w-full`} onClick={saveResellerHome}>Save reseller home page</button>
             </div>
             <div className={`${card} p-5 space-y-3`}>
               <div className="font-black">Notices & offers</div>
