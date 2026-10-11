@@ -64,7 +64,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const [auth, setAuth] = useState({ email: '', password: '', name: '', whatsapp: '', signup: !!startSignup });
   const [msg, setMsg] = useState('');
   const [creditTo, setCreditTo] = useState('');
-  const [actOpen, setActOpen] = useState(false);
+  const [addTab, setAddTab] = useState<'id' | 'new'>('id');
   const [actCode, setActCode] = useState('');
   const [actMonths, setActMonths] = useState(1);
   const [actInfo, setActInfo] = useState<any>(null);
@@ -139,7 +139,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const [stats, setStats] = useState<any>(null);
   const [team, setTeam] = useState<any[]>([]);
   const [live, setLive] = useState<Record<string, any>>({});
-  const [refInfo, setRefInfo] = useState<{ code: string; direct_count: number; bonus_credits: number } | null>(null);
+  const [refInfo, setRefInfo] = useState<{ code: string; share_code?: string; direct_count: number; bonus_credits: number } | null>(null);
   const toAcc = (r: any, pool: string[] = []): VpnAccount => ({
     id: r.id, username: r.username, password: r.password, server: r.server_tier === 'VIP' ? 'VIP Brilliant' : 'Normal Dhaka',
     serverHost: r.server_host, days: r.days, bandwidthType: r.bandwidth_type, bandwidthGb: r.bandwidth_gb, usedMb: Number(r.used_mb),
@@ -203,7 +203,8 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => setUser(sess?.user ?? null));
     return () => sub.subscription.unsubscribe();
   }, []);
-  function closeAct() { setActOpen(false); setActCode(''); setActInfo(null); setActErr(''); setActMonths(1); }
+  function closeAct() { setActCode(''); setActInfo(null); setActErr(''); setActMonths(1); }
+  function closeAdd() { setModal(false); closeAct(); }
   async function findCustomer() {
     setActErr(''); setActInfo(null); setActBusy(true);
     const { data, error } = await supabase.rpc('preview_customer', { p_code: actCode });
@@ -216,9 +217,19 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     setActBusy(false);
     if (error) { setActErr(error.message); return; }
     alert(`Customer ${data?.username || ''} activated for ${actMonths} month(s). Valid until ${data?.expiry_date}. The customer is now in your list.`);
-    closeAct(); load();
+    closeAdd(); load();
   }
   useEffect(() => { if (user) load(); else { setProf(null); setAccounts([]); } }, [user]);
+  // while the side menu is open on a phone, the page behind it must stay exactly where it is
+  useEffect(() => {
+    if (!menu) return;
+    const h = document.documentElement, b = document.body;
+    const prev = { h: h.style.overflow, b: b.style.overflow };
+    h.style.overflow = 'hidden'; b.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(false); };
+    window.addEventListener('keydown', onKey);
+    return () => { h.style.overflow = prev.h; b.style.overflow = prev.b; window.removeEventListener('keydown', onKey); };
+  }, [menu]);
   // the admin page is for admins only: any other account is signed out again
   useEffect(() => {
     if (adminOnly && user && prof && prof.role !== 'admin') { supabase.auth.signOut(); setMsg('This page is for the admin only. Resellers: please use Account on the main website.'); }
@@ -743,8 +754,8 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
 
   return (
     <div style={(dark ? DARK : LIGHT) as any} className="min-h-screen bg-[var(--bg)] text-[var(--ink)] flex">
-      {menu && <div className="fixed inset-0 z-[55] bg-black/40 lg:hidden" onClick={() => setMenu(false)} />}
-      <aside className={`fixed lg:sticky top-0 z-[60] lg:z-40 h-[100dvh] lg:h-screen overflow-y-auto w-64 shrink-0 bg-[var(--card)] border-r border-[var(--line)] p-5 flex flex-col transition-transform ${menu ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      {menu && <div className="fixed inset-0 z-[55] bg-black/50 backdrop-blur-[1px] lg:hidden" onClick={() => setMenu(false)} />}
+      <aside className={`fixed inset-y-0 left-0 lg:sticky lg:top-0 z-[60] lg:z-40 h-[100dvh] lg:h-screen overflow-y-auto overscroll-contain w-64 max-w-[85vw] lg:max-w-none shrink-0 will-change-transform bg-[var(--card)] border-r border-[var(--line)] p-5 flex flex-col transition-transform ${menu ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="flex items-center gap-3 mb-8">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div>
           <div className="leading-tight"><div className="font-black tracking-tight">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">{mode === 'vpn' ? 'VPN PANEL' : 'DNS PANEL'}</div></div>
@@ -798,7 +809,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
               <div className="relative max-w-lg"><div className="text-xs font-bold uppercase tracking-widest opacity-80">Welcome back</div>
                 <h1 className="text-2xl sm:text-3xl font-black mt-1">Welcome {prof?.name || user?.email?.split('@')[0] || ''}</h1>
                 <p className="mt-1 text-sm opacity-90">All systems are running smoothly. Here&apos;s what&apos;s happening with your panel today.</p>
-                <div className="mt-5 flex flex-wrap gap-2"><button onClick={() => { setTab('users'); setModal(true); }} className={`${btn} bg-white text-indigo-600 hover:bg-indigo-50`}><UserPlus className="h-4 w-4" />Add User</button>
+                <div className="mt-5 flex flex-wrap gap-2"><button onClick={() => { setTab('users'); setAddTab('id'); setModal(true); }} className={`${btn} bg-white text-indigo-600 hover:bg-indigo-50`}><UserPlus className="h-4 w-4" />Add User</button>
                   <button onClick={() => setTab('credit')} className={`${btn} bg-white/20 text-white hover:bg-white/30`}><PlusCircle className="h-4 w-4" />Add Credit</button></div></div>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
@@ -922,7 +933,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
           </>)}
 
           {tab === 'users' && (<>
-            <Head t={mode === 'vpn' ? 'VPN Users' : 'Users'} s={mode === 'vpn' ? 'WireGuard accounts with bandwidth' : 'Customers by phone number'}><div className="flex gap-2">{mode === 'dns' && <button onClick={() => setActOpen(true)} className={ghost}><Check className="h-4 w-4" />Activate by ID</button>}<button onClick={() => setModal(true)} className={primary}><UserPlus className="h-4 w-4" />Add User</button></div></Head>
+            <Head t={mode === 'vpn' ? 'VPN Users' : 'Users'} s={mode === 'vpn' ? 'WireGuard accounts with bandwidth' : 'Customers by phone number'}><div className="flex gap-2"><button onClick={() => { setAddTab('id'); setModal(true); }} className={primary}><UserPlus className="h-4 w-4" />Add User</button></div></Head>
             <div className="relative mb-4"><Search className="absolute left-3.5 top-3 h-4 w-4 text-[var(--mut)]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={mode === 'vpn' ? 'Search username…' : 'Search phone number…'} className={`${inp} pl-10`} /></div>
             <Reminders />
             <UsersTable rows={list} />
@@ -954,7 +965,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                 <tbody>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)', _me: true }] : []), ...((stats?.per_reseller || resellers) as any[])].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{r._me ? '-' : (r.upline_name || 'Admin')}</td><td className="px-4 py-3">{r._me ? '-' : `${r.direct_count ?? 0} direct · ${r.team_count ?? 0} total`}</td><td className="px-4 py-3">{r._me ? '-' : Number(r.team_sales_bdt ?? 0).toLocaleString()}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3"><button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button></td></tr>)}
                   {resellers.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-[var(--mut)]">No resellers</td></tr>}</tbody></table></div>
             ) : (<>
-              {refInfo?.code && <div className={`${card} p-4 mb-4 flex flex-wrap items-center gap-3 text-sm`}><Link2 className="h-4 w-4 text-indigo-500" /><span className="text-[var(--mut)]">Your invite link:</span><b className="break-all">{typeof window !== 'undefined' ? window.location.origin : ''}/?ref={refInfo.code}</b><button className={`${ghost} !py-1.5 ml-auto`} onClick={() => flash('ref2', `${window.location.origin}/?ref=${refInfo.code}`)}>{copied === 'ref2' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>}
+              {refInfo?.code && <div className={`${card} p-4 mb-4 flex flex-wrap items-center gap-3 text-sm`}><Link2 className="h-4 w-4 text-indigo-500" /><span className="text-[var(--mut)]">Your invite link:</span><b className="break-all">{typeof window !== 'undefined' ? window.location.origin : ''}/?ref={refInfo.share_code || refInfo.code}</b><button className={`${ghost} !py-1.5 ml-auto`} onClick={() => flash('ref2', `${window.location.origin}/?ref=${refInfo.share_code || refInfo.code}`)}>{copied === 'ref2' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>}
               <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[560px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Level', 'Credits bought', 'Customers', 'Joined'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
                 <tbody>{team.map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.level === 1 ? 'Direct' : `Level ${r.level}`}</td><td className="px-4 py-3">{r.credits_bought}</td><td className="px-4 py-3">{r.customers}</td><td className="px-4 py-3">{new Date(r.joined).toLocaleDateString()}</td></tr>)}
                   {team.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-[var(--mut)]">No one has joined through your link yet</td></tr>}</tbody></table></div>
@@ -1166,11 +1177,11 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                 <h3 className="font-black text-[var(--ink)]">Refer & earn</h3>
                 <div className="text-xs text-[var(--mut)]">Share your link. When a reseller you invite makes their first top-up of 20+ credits, you get 10% of it as free credits (20 → 2, 50 → 5, 100 → 10).</div>
                 <div className="flex items-center gap-2">
-                  <input readOnly className={inp} value={`${typeof window !== 'undefined' ? window.location.origin : ''}/?ref=${refInfo.code}`} />
-                  <button className={ghost} onClick={() => flash('ref', `${window.location.origin}/?ref=${refInfo.code}`)}>{copied === 'ref' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
+                  <input readOnly className={inp} value={`${typeof window !== 'undefined' ? window.location.origin : ''}/?ref=${refInfo.share_code || refInfo.code}`} />
+                  <button className={ghost} onClick={() => flash('ref', `${window.location.origin}/?ref=${refInfo.share_code || refInfo.code}`)}>{copied === 'ref' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
                 </div>
                 <div className="flex gap-3 text-sm">
-                  <div className="flex-1 rounded-xl bg-[var(--soft)] px-4 py-3"><div className="text-[11px] text-[var(--mut)]">Code</div><b>{refInfo.code}</b></div>
+                  <div className="flex-1 rounded-xl bg-[var(--soft)] px-4 py-3"><div className="text-[11px] text-[var(--mut)]">Code</div><b className="break-all">{refInfo.share_code || refInfo.code}</b></div>
                   <div className="flex-1 rounded-xl bg-[var(--soft)] px-4 py-3"><div className="text-[11px] text-[var(--mut)]">Joined</div><b>{refInfo.direct_count}</b></div>
                   <div className="flex-1 rounded-xl bg-[var(--soft)] px-4 py-3"><div className="text-[11px] text-[var(--mut)]">Bonus credits</div><b>{refInfo.bonus_credits}</b></div>
                 </div>
@@ -1196,10 +1207,16 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
         </div>
       )}
 
-      {actOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={closeAct}>
-          <div className={`${card} w-full max-w-sm p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
-            <div className="flex items-center justify-between mb-3"><h3 className="text-lg font-black">Activate customer</h3><button onClick={closeAct}><X className="h-5 w-5" /></button></div>
+      {modal && mode === 'dns' && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={closeAdd}>
+          <div className={`${card} w-full max-w-md p-6 max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
+            <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-black">Add User</h3><button onClick={closeAdd}><X className="h-5 w-5" /></button></div>
+            <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-[var(--soft)] p-1">
+              {([['id', 'Activate by Customer ID'], ['new', 'Create New Account']] as const).map(([k, l]) => (
+                <button key={k} type="button" onClick={() => setAddTab(k)} className={`rounded-lg px-2 py-2 text-xs font-bold transition ${addTab === k ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow' : 'text-[var(--mut)]'}`}>{l}</button>))}
+            </div>
+            {addTab === 'id' ? (
+            <div>
             <div className="text-xs text-[var(--mut)] mb-3">Ask the customer for the 6-digit ID shown on their page. 1 credit = 1 month.</div>
             <div className="flex gap-2 mb-3">
               <input className={`${inp} font-mono tracking-[0.2em]`} inputMode="numeric" maxLength={6} placeholder="6-digit ID" value={actCode} onChange={(e) => { setActCode(e.target.value.replace(/\D/g, '')); setActInfo(null); setActErr(''); }} />
@@ -1217,14 +1234,8 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
               </div>
             )}
             {actErr && <div className="mt-3 text-xs font-bold text-rose-500">{actErr}</div>}
-          </div>
-        </div>
-      )}
-
-      {modal && mode === 'dns' && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setModal(false)}>
-          <div className={`${card} w-full max-w-md p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
-            <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-black">Add User</h3><button onClick={() => setModal(false)}><X className="h-5 w-5" /></button></div>
+            </div>
+            ) : (
             <div className="space-y-3">
               <div className="flex gap-2">
                 <select className={`${inp} !w-36 shrink-0`} value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })}>{COUNTRIES.map((c) => <option key={c.id} value={c.id}>{c.n} +{c.cc}</option>)}</select>
@@ -1236,6 +1247,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
               {err && <div className="text-sm font-semibold text-rose-500">{err}</div>}
               <button className={`${primary} w-full`} onClick={create}>Create & get link</button>
             </div>
+            )}
           </div>
         </div>
       )}
