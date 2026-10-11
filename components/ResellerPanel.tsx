@@ -28,6 +28,7 @@ const PRICE: Record<string, Record<string, number>> = {
 };
 const VPN_GB = ['10', '30', '50', '100', '200', '500'];
 const PER_CREDIT = 200; // 10 credits = ৳2000
+import { parsePlans } from './Storefront';
 const card = 'rounded-2xl bg-[var(--card)] border border-[var(--line)] shadow-[0_8px_30px_rgba(60,72,140,0.07)]';
 const inp = 'w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3.5 py-2.5 text-sm text-[var(--ink)] outline-none focus:border-indigo-400';
 const btn = 'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition active:scale-95';
@@ -50,7 +51,7 @@ async function shrinkImage(file: File): Promise<Blob> {
 }
 function copy(t: string) { try { navigator.clipboard?.writeText(t); } catch { /* ignore */ } }
 
-export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: () => void; onStorefront: () => void }) {
+export default function ResellerPanel({ onLogout, onStorefront, startSignup }: { onLogout: () => void; onStorefront: () => void; startSignup?: boolean }) {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [dark, setDark] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -60,7 +61,7 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [user, setUser] = useState<any>(null);
   const [ready, setReady] = useState(false);
   const [prof, setProf] = useState<any>(null);
-  const [auth, setAuth] = useState({ email: '', password: '', name: '', whatsapp: '', signup: false });
+  const [auth, setAuth] = useState({ email: '', password: '', name: '', whatsapp: '', signup: !!startSignup });
   const [msg, setMsg] = useState('');
   const [creditTo, setCreditTo] = useState('');
   const [pName, setPName] = useState('');
@@ -98,7 +99,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
   const [reqCredits, setReqCredits] = useState<number>(10);
   const [trx, setTrx] = useState('');
   const [siteCfg, setSiteCfg] = useState<Record<string, string>>({});
-  const [siteForm, setSiteForm] = useState({ support_whatsapp_bd: '', support_whatsapp_my: '', support_email: '', facebook_url: '', telegram_url: '' });
+  const [siteForm, setSiteForm] = useState({ support_whatsapp_bd: '', support_whatsapp_my: '', support_email: '', facebook_url: '', telegram_url: '', store_headline: '', store_subline: '', store_note: '' });
+  const [planRows, setPlanRows] = useState<{ label: string; price: string; note: string; hot: boolean }[]>([]);
   const [annList, setAnnList] = useState<any[]>([]);
   const [allNotices, setAllNotices] = useState<any[]>([]);
   const [nForm, setNForm] = useState({ kind: 'notice', title: '', body: '', days: '0' });
@@ -175,7 +177,8 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
     const st = await supabase.from('app_settings').select('key,value');
     const sm: Record<string, string> = {}; (st.data || []).forEach((x: any) => { sm[x.key] = x.value; });
     setSiteCfg(sm);
-    setSiteForm({ support_whatsapp_bd: sm.support_whatsapp_bd || '', support_whatsapp_my: sm.support_whatsapp_my || '', support_email: sm.support_email || '', facebook_url: sm.facebook_url || '', telegram_url: sm.telegram_url || '' });
+    setSiteForm({ support_whatsapp_bd: sm.support_whatsapp_bd || '', support_whatsapp_my: sm.support_whatsapp_my || '', support_email: sm.support_email || '', facebook_url: sm.facebook_url || '', telegram_url: sm.telegram_url || '', store_headline: sm.store_headline || '', store_subline: sm.store_subline || '', store_note: sm.store_note || '' });
+    setPlanRows(parsePlans(sm.store_plans).map((p) => ({ label: p.label, price: p.price, note: p.note || '', hot: !!p.hot })));
     setPay({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: Number(sm.price_per_credit) || PER_CREDIT });
     setPayEdit({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: String(Number(sm.price_per_credit) || PER_CREDIT) });
     const pa = await supabase.from('payment_accounts').select('*').order('created_at', { ascending: true });
@@ -292,6 +295,15 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
       if (error) { alert(error.message); return; }
     }
     alert('Saved. The website now shows the new details.'); load();
+  }
+  async function saveStore() {
+    const rows = planRows.filter((r) => r.label.trim() && r.price.trim()).map((r) => ({ label: r.label.trim(), price: r.price.trim(), note: r.note.trim(), hot: r.hot }));
+    for (const [k, v] of [['store_headline', siteForm.store_headline], ['store_subline', siteForm.store_subline], ['store_note', siteForm.store_note], ['store_plans', JSON.stringify(rows)]] as const) {
+      if ((v || '') === (siteCfg[k] || '')) continue;
+      const { error } = await supabase.rpc('admin_set_setting', { p_key: k, p_value: v });
+      if (error) { alert(error.message); return; }
+    }
+    alert('Saved. The customer home page now shows the new rates and text.'); load();
   }
   async function saveNotice() {
     const { error } = await supabase.rpc('admin_save_announcement', { p_id: null, p_kind: nForm.kind, p_title: nForm.title, p_body: nForm.body, p_active: true, p_days: Math.floor(Number(nForm.days) || 0) });
@@ -1037,6 +1049,28 @@ export default function ResellerPanel({ onLogout, onStorefront }: { onLogout: ()
               <label className="text-xs font-bold text-[var(--mut)]">Telegram link</label>
               <input className={inp} value={siteForm.telegram_url} onChange={(e) => setSiteForm({ ...siteForm, telegram_url: e.target.value })} placeholder="https://t.me/..." />
               <button type="button" className={`${primary} w-full`} onClick={saveSite}>Save website details</button>
+            </div>
+            <div className={`${card} p-5 mb-6 space-y-3`}>
+              <div className="font-black">Customer home page (rates and text)</div>
+              <div className="text-xs text-[var(--mut)]">This is what customers see on the main website. Write prices exactly as you want them shown, for example ৳1,000.</div>
+              <label className="text-xs font-bold text-[var(--mut)]">Headline</label>
+              <input className={inp} value={siteForm.store_headline} onChange={(e) => setSiteForm({ ...siteForm, store_headline: e.target.value })} placeholder="Fast • Secure • Private Smart DNS" />
+              <label className="text-xs font-bold text-[var(--mut)]">Short description</label>
+              <textarea className={`${inp} min-h-[70px]`} value={siteForm.store_subline} onChange={(e) => setSiteForm({ ...siteForm, store_subline: e.target.value })} />
+              <label className="text-xs font-bold text-[var(--mut)]">Rates (up to 8)</label>
+              {planRows.map((r, i) => (
+                <div key={i} className="grid grid-cols-2 gap-2 rounded-xl border border-[var(--line)] p-2.5">
+                  <input className={inp} value={r.label} onChange={(e) => setPlanRows(planRows.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} placeholder="Name (3 Months)" />
+                  <input className={inp} value={r.price} onChange={(e) => setPlanRows(planRows.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} placeholder="Price (৳2,500)" />
+                  <input className={`${inp} col-span-2`} value={r.note} onChange={(e) => setPlanRows(planRows.map((x, j) => j === i ? { ...x, note: e.target.value } : x))} placeholder="Small note (optional)" />
+                  <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={r.hot} onChange={(e) => setPlanRows(planRows.map((x, j) => j === i ? { ...x, hot: e.target.checked } : x))} />Most popular</label>
+                  <button type="button" className={`${ghost} !py-1.5 text-xs text-rose-500`} onClick={() => setPlanRows(planRows.filter((_, j) => j !== i))}>Remove</button>
+                </div>
+              ))}
+              {planRows.length < 8 && <button type="button" className={`${ghost} w-full text-xs`} onClick={() => setPlanRows([...planRows, { label: '', price: '', note: '', hot: false }])}>+ Add a rate</button>}
+              <label className="text-xs font-bold text-[var(--mut)]">Note under the rates (optional)</label>
+              <input className={inp} value={siteForm.store_note} onChange={(e) => setSiteForm({ ...siteForm, store_note: e.target.value })} placeholder="e.g. Pay by bKash or Nagad, then send the screenshot on WhatsApp" />
+              <button type="button" className={`${primary} w-full`} onClick={saveStore}>Save customer home page</button>
             </div>
             <div className={`${card} p-5 space-y-3`}>
               <div className="font-black">Notices & offers</div>
