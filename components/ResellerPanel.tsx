@@ -28,7 +28,7 @@ const PRICE: Record<string, Record<string, number>> = {
 };
 const VPN_GB = ['10', '30', '50', '100', '200', '500'];
 const PER_CREDIT = 200; // 10 credits = ৳2000
-import { parsePlans } from './Storefront';
+import { parsePlans, AccountTypeSelect } from './Storefront';
 const card = 'rounded-2xl bg-[var(--card)] border border-[var(--line)] shadow-[0_8px_30px_rgba(60,72,140,0.07)]';
 const inp = 'w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3.5 py-2.5 text-sm text-[var(--ink)] outline-none focus:border-indigo-400';
 const btn = 'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition active:scale-95';
@@ -51,7 +51,7 @@ async function shrinkImage(file: File): Promise<Blob> {
 }
 function copy(t: string) { try { navigator.clipboard?.writeText(t); } catch { /* ignore */ } }
 
-export default function ResellerPanel({ onLogout, onStorefront, startSignup }: { onLogout: () => void; onStorefront: () => void; startSignup?: boolean }) {
+export default function ResellerPanel({ onLogout, onStorefront, startSignup, adminOnly, onAccountType }: { onLogout: () => void; onStorefront: () => void; startSignup?: boolean; adminOnly?: boolean; onAccountType?: (v: 'reseller' | 'customer') => void }) {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [dark, setDark] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -197,7 +197,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
   useEffect(() => {
     try {
       const c = (new URLSearchParams(window.location.search).get('ref') || sessionStorage.getItem('mh_ref') || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
-      if (c) { setRefCode(c); setAuth((a) => ({ ...a, signup: true })); }
+      if (c && !adminOnly) { setRefCode(c); setAuth((a) => ({ ...a, signup: true })); }
     } catch { /* ignore */ }
     supabase.auth.getSession().then(({ data }) => { setUser(data.session?.user ?? null); setReady(true); });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => setUser(sess?.user ?? null));
@@ -219,6 +219,10 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
     closeAct(); load();
   }
   useEffect(() => { if (user) load(); else { setProf(null); setAccounts([]); } }, [user]);
+  // the admin page is for admins only: any other account is signed out again
+  useEffect(() => {
+    if (adminOnly && user && prof && prof.role !== 'admin') { supabase.auth.signOut(); setMsg('This page is for the admin only. Resellers: please use Account on the main website.'); }
+  }, [adminOnly, user, prof]);
   useEffect(() => { if (user && tab === 'users') loadInactive(inactiveMonths); }, [user, tab, inactiveMonths]);
   useEffect(() => {
     if (!isAdmin || tab !== 'dashboard') return;
@@ -723,6 +727,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
     <div style={themeVars} className="min-h-screen grid place-items-center bg-[var(--bg)] p-4 text-[var(--ink)]">
       <div className={`${card} w-full max-w-sm p-7`}>
         <div className="mb-5 flex items-center gap-3"><div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div><div><div className="font-black">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">RESELLER LOGIN</div></div></div>
+        {onAccountType && !adminOnly && <AccountTypeSelect value="reseller" onChange={onAccountType} className={inp} />}
         {auth.signup && refCode && <div className="mb-3 rounded-xl bg-[var(--soft)] px-3.5 py-2.5 text-xs text-[var(--mut)]">Invited by: <b className="text-[var(--ink)]">{inviter || 'a MaheHub reseller'}</b></div>}
         {auth.signup && <input className={`${inp} mb-3`} placeholder="Name" value={auth.name} onChange={(e) => setAuth({ ...auth, name: e.target.value })} />}
         {auth.signup && <input className={`${inp} mb-3`} inputMode="tel" placeholder="WhatsApp number with country code" value={auth.whatsapp} onChange={(e) => setAuth({ ...auth, whatsapp: e.target.value })} />}
@@ -730,7 +735,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
         <input className={`${inp} mb-3`} type="password" placeholder="Password (min 6)" value={auth.password} onChange={(e) => setAuth({ ...auth, password: e.target.value })} />
         {msg && <div className="mb-3 text-sm font-semibold text-rose-500">{msg}</div>}
         <button className={`${primary} w-full`} onClick={doAuth}>{auth.signup ? 'Create account' : 'Login'}</button>
-        <button className="mt-3 w-full text-sm font-semibold text-indigo-500" onClick={() => { setMsg(''); setAuth({ ...auth, signup: !auth.signup }); }}>{auth.signup ? 'Already have an account? Log in' : 'Create a new reseller account'}</button>
+        {!adminOnly && <button className="mt-3 w-full text-sm font-semibold text-indigo-500" onClick={() => { setMsg(''); setAuth({ ...auth, signup: !auth.signup }); }}>{auth.signup ? 'Already have an account? Log in' : 'Create a new reseller account'}</button>}
         <button className="mt-1 w-full text-xs text-[var(--mut)]" onClick={onStorefront}>← Storefront</button>
       </div>
     </div>

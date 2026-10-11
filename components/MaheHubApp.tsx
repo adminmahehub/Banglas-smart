@@ -13,7 +13,7 @@ import {
   CreditPackage
 } from '../lib/suauthData';
 import ResellerPanel from './ResellerPanel';
-import { AccountChoose, CustomerAccess, parsePlans } from './Storefront';
+import { CustomerAccess, parsePlans } from './Storefront';
 import { supabase } from '../lib/supabase';
 import { 
   LayoutDashboard, 
@@ -204,11 +204,22 @@ function StarVortexCanvas({ className = '' }: { className?: string }) {
   );
 }
 
-export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { initialView?: 'store' | 'resellerHome' }) {
+export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { initialView?: 'store' | 'resellerHome' | 'admin' }) {
   // Navigation: 'home' | 'login' | 'portal'
-  const [currentView, setCurrentView] = useState<'store' | 'home' | 'choose' | 'customer' | 'login' | 'portal'>(initialView === 'resellerHome' ? 'home' : 'store');
+  const [currentView, setCurrentView] = useState<'store' | 'home' | 'account' | 'portal'>(initialView === 'admin' ? 'portal' : initialView === 'resellerHome' ? 'account' : 'store');
+  const [accountType, setAccountType] = useState<'reseller' | 'customer'>(initialView === 'resellerHome' ? 'reseller' : 'customer');
+  const [resellerSession, setResellerSession] = useState(false);
   const [startSignup, setStartSignup] = useState(false);
   const customerHome = currentView === 'store';
+  // one account page for everybody: the customer home sends people to a customer account, the reseller side to a reseller account
+  const goAccount = () => { setAccountType(customerHome ? 'customer' : 'reseller'); setCurrentView('account'); };
+  const goHome = () => setCurrentView(resellerSession ? 'home' : 'store');
+  // only a logged-in reseller/admin sees the wholesale (reseller) home page
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setResellerSession(!!data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => { setResellerSession(!!sess); if (!sess) setCurrentView((v) => (v === 'home' ? 'store' : v)); });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   // Active Role in Portal: 'reseller' or 'admin'
   const [portalRole, setPortalRole] = useState<'reseller' | 'admin'>('reseller');
@@ -327,16 +338,18 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
     const c = (new URLSearchParams(window.location.search).get('ref') || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
     if (!c) return;
     try { sessionStorage.setItem('mh_ref', c); } catch { /* ignore */ }
-    setCurrentView('login');
+    setAccountType('reseller');
+    setCurrentView('account');
     setStartSignup(true);
   }, []);
 
   // Keep the address bar in step with the page: / = customer store, /reseller/ = reseller side
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const want = currentView === 'store' || currentView === 'choose' || currentView === 'customer' ? '/' : '/reseller/';
+    if (initialView === 'admin') return;
+    const want = currentView === 'store' || currentView === 'home' ? '/' : '/reseller/';
     if (window.location.pathname !== want && !window.location.search) window.history.replaceState(null, '', want);
-  }, [currentView]);
+  }, [currentView, initialView]);
 
   // Load persistent real-time data from localStorage
   useEffect(() => {
@@ -871,16 +884,14 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
 
           {/* Master View Mode Switcher */}
           <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-            <div className={`flex items-center gap-1 p-1 rounded-xl border w-full sm:w-auto ${
+            <div className={`${initialView === 'admin' ? 'hidden ' : ''}flex items-center gap-1 p-1 rounded-xl border w-full sm:w-auto ${
               theme === 'dark' ? 'bg-[#0f172f] border-slate-800' : 'bg-slate-100 border-slate-300 shadow-inner'
             }`}>
               {([
-                ['store', '🏠 Home', 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950', () => setCurrentView('store')],
-                ['home', '🔑 Reseller Login', 'bg-amber-500 text-slate-950', () => setCurrentView('login')],
-                ['choose', '➕ Create Account', 'bg-emerald-500 text-slate-950', () => { if (currentView === 'home' || currentView === 'login' || currentView === 'portal') { setStartSignup(true); setCurrentView('login'); } else { setCurrentView('customer'); } }],
-                ['portal', '📊 Portal Suite', 'bg-blue-600 text-white', () => { setCurrentView('portal'); setPortalTab('dashboard'); }],
+                ['store', '🏠 Home', 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950', goHome],
+                ['account', '👤 Account', 'bg-emerald-500 text-slate-950', goAccount],
               ] as const).map(([id, label, on, fn]) => {
-                const active = id === 'home' ? (currentView === 'home' || (currentView === 'login' && !startSignup)) : id === 'choose' ? (currentView === 'customer' || (startSignup && currentView === 'login')) : id === 'portal' ? currentView === 'portal' : currentView === 'store';
+                const active = id === 'account' ? currentView === 'account' : (currentView === 'store' || currentView === 'home');
                 return (
                   <button key={id} onClick={() => { setStartSignup(false); fn(); }}
                     className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg font-bold transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${
@@ -994,12 +1005,9 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
       {/* ========================================================================= */}
       {/* 1. VIEW: PUBLIC TELECOM STOREFRONT (Fast, Secure, Smart DNS) */}
       {/* ========================================================================= */}
-      {currentView === 'choose' && (
-        <AccountChoose theme={theme} onCustomer={() => setCurrentView('customer')} onReseller={() => { setStartSignup(true); setCurrentView('login'); }} />
-      )}
-      {currentView === 'customer' && (
-        <CustomerAccess theme={theme} onBack={() => setCurrentView('store')} />
-      )}
+      {currentView === 'account' && (accountType === 'customer'
+        ? <CustomerAccess theme={theme} onBack={() => setCurrentView('store')} onAccountType={setAccountType} />
+        : <ResellerPanel startSignup={startSignup} onAccountType={setAccountType} onLogout={() => setCurrentView('store')} onStorefront={goHome} />)}
 
       {(currentView === 'home' || currentView === 'store') && (
         <div className="space-y-16 pb-20 relative">
@@ -1154,7 +1162,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 ) : (
                 <button
                   onClick={() => {
-                    setCurrentView('portal');
+                    goAccount();
                     setPortalTab('customers');
                     setIsFastCustomerOpen(true);
                   }}
@@ -1358,7 +1366,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 </div>
                 <button
                   onClick={() => {
-                    setCurrentView('portal');
+                    goAccount();
                     setPortalTab('customers');
                     setIsFastCustomerOpen(true);
                   }}
@@ -1380,7 +1388,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 </div>
                 <button
                   onClick={() => {
-                    setCurrentView('portal');
+                    goAccount();
                     setPortalTab('customers');
                     setIsFastCustomerOpen(true);
                   }}
@@ -1405,7 +1413,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 </div>
                 <button
                   onClick={() => {
-                    setCurrentView('portal');
+                    goAccount();
                     setPortalTab('customers');
                     setIsFastCustomerOpen(true);
                   }}
@@ -1423,7 +1431,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 </div>
                 <button
                   onClick={() => {
-                    setCurrentView('portal');
+                    goAccount();
                     setPortalTab('customers');
                     setIsFastCustomerOpen(true);
                   }}
@@ -1441,7 +1449,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 </div>
                 <button
                   onClick={() => {
-                    setCurrentView('portal');
+                    goAccount();
                     setPortalTab('customers');
                     setIsFastCustomerOpen(true);
                   }}
@@ -1551,7 +1559,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 </div>
 
                 <button
-                  onClick={() => setCurrentView('login')}
+                  onClick={goAccount}
                   className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-xl transition-all flex items-center gap-1.5 shrink-0"
                 >
                   <Lock className="h-4 w-4" />
@@ -2194,23 +2202,23 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                     Reseller Portal
                   </h5>
                   <ul className="space-y-2 text-xs text-slate-400">
-                    <li className="hover:text-amber-500 transition-colors flex items-center gap-1.5 cursor-pointer" onClick={() => setCurrentView('login')}>
+                    <li className="hover:text-amber-500 transition-colors flex items-center gap-1.5 cursor-pointer" onClick={goAccount}>
                       <ChevronRight className="h-3 w-3 text-amber-500" />
                       <span className="font-bold text-amber-500">Reseller Portal Login &rarr;</span>
                     </li>
-                    <li className="hover:text-cyan-500 transition-colors flex items-center gap-1.5 cursor-pointer" onClick={() => { setCurrentView('portal'); setPortalTab('topup'); }}>
+                    <li className="hover:text-cyan-500 transition-colors flex items-center gap-1.5 cursor-pointer" onClick={() => { goAccount(); setPortalTab('topup'); }}>
                       <ChevronRight className="h-3 w-3 text-cyan-500" />
                       <span>Instant Credit Packages</span>
                     </li>
-                    <li className="hover:text-cyan-500 transition-colors flex items-center gap-1.5 cursor-pointer" onClick={() => { setCurrentView('portal'); setPortalTab('dns'); }}>
+                    <li className="hover:text-cyan-500 transition-colors flex items-center gap-1.5 cursor-pointer" onClick={() => { goAccount(); setPortalTab('dns'); }}>
                       <ChevronRight className="h-3 w-3 text-cyan-500" />
                       <span>DNS Configuration Guides</span>
                     </li>
-                    <li className="hover:text-cyan-500 transition-colors flex items-center gap-1.5 cursor-pointer" onClick={() => { setCurrentView('portal'); setPortalTab('resellers'); }}>
+                    <li className="hover:text-cyan-500 transition-colors flex items-center gap-1.5 cursor-pointer" onClick={() => { goAccount(); setPortalTab('resellers'); }}>
                       <ChevronRight className="h-3 w-3 text-cyan-500" />
                       <span>Sub-Reseller Management</span>
                     </li>
-                    <li className="hover:text-cyan-500 transition-colors flex items-center gap-1.5 cursor-pointer" onClick={() => { setCurrentView('portal'); setPortalTab('transactions'); }}>
+                    <li className="hover:text-cyan-500 transition-colors flex items-center gap-1.5 cursor-pointer" onClick={() => { goAccount(); setPortalTab('transactions'); }}>
                       <ChevronRight className="h-3 w-3 text-cyan-500" />
                       <span>Billing &amp; Invoices</span>
                     </li>
@@ -2298,15 +2306,9 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
       {/* ========================================================================= */}
       {/* 2. VIEW: MAHEHUB SELLER LOGIN (Animated Cosmic Vortex Screen) */}
       {/* ========================================================================= */}
-      {currentView === 'login' && (
-        <ResellerPanel startSignup={startSignup} onLogout={() => setCurrentView('store')} onStorefront={() => setCurrentView('store')} />
-      )}
-
-      {/* ========================================================================= */}
-      {/* 3. VIEW: SUAUTH MASTER MANAGEMENT PORTAL (Reseller & Admin Modes) */}
-      {/* ========================================================================= */}
+      {/* Admin panel: only opened from /admin (admin login only, no public link to it) */}
       {currentView === 'portal' && (
-        <ResellerPanel startSignup={startSignup} onLogout={() => setCurrentView('store')} onStorefront={() => setCurrentView('store')} />
+        <ResellerPanel adminOnly onLogout={() => setCurrentView('portal')} onStorefront={() => { window.location.href = '/'; }} />
       )}
 
 

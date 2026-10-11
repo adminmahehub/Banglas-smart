@@ -251,7 +251,19 @@ export function AccountChoose({ theme, onReseller, onCustomer }: { theme: 'dark'
   );
 }
 
-export function CustomerAccess({ theme, onBack }: { theme: 'dark' | 'light'; onBack: () => void }) {
+export function AccountTypeSelect({ value, onChange, className }: { value: 'reseller' | 'customer'; onChange: (v: 'reseller' | 'customer') => void; className: string }) {
+  return (
+    <label className="mb-4 block">
+      <span className="mb-1 block text-[11px] font-bold opacity-70">Account type</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as 'reseller' | 'customer')} className={className}>
+        <option value="customer">Customer account (use Smart DNS, free trial)</option>
+        <option value="reseller">Reseller account (sell DNS, wholesale rates)</option>
+      </select>
+    </label>
+  );
+}
+
+export function CustomerAccess({ theme, onBack, onAccountType }: { theme: 'dark' | 'light'; onBack: () => void; onAccountType?: (v: 'reseller' | 'customer') => void }) {
   const dark = theme === 'dark';
   const [tab, setTab] = useState<'new' | 'link'>('new');
   const [name, setName] = useState('');
@@ -290,6 +302,7 @@ export function CustomerAccess({ theme, onBack }: { theme: 'dark' | 'light'; onB
     <div className="mx-auto max-w-md px-4 py-14">
       <button onClick={onBack} className={`mb-4 text-xs font-bold ${dark ? 'text-slate-400' : 'text-slate-600'}`}>← Back</button>
       <div className={`rounded-3xl border p-6 ${box}`}>
+        {onAccountType && <AccountTypeSelect value="customer" onChange={onAccountType} className={inp} />}
         <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-black/10 p-1 text-xs font-black">
           <button onClick={() => { setTab('new'); setErr(''); }} className={`rounded-lg py-2 ${tab === 'new' ? 'bg-emerald-500 text-slate-950' : ''}`}>New customer</button>
           <button onClick={() => { setTab('link'); setErr(''); }} className={`rounded-lg py-2 ${tab === 'link' ? 'bg-emerald-500 text-slate-950' : ''}`}>I have my link</button>
