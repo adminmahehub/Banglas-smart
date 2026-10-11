@@ -874,10 +874,11 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
             }`}>
               {([
                 ['store', '🏠 Home', 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950', () => setCurrentView('store')],
-                ['home', '🔑 Reseller Login', 'bg-amber-500 text-slate-950', () => setCurrentView('home')],
+                ['home', '🔑 Reseller Login', 'bg-amber-500 text-slate-950', () => setCurrentView('login')],
                 ['choose', '➕ Create Account', 'bg-emerald-500 text-slate-950', () => setCurrentView('choose')],
+                ['portal', '📊 Portal Suite', 'bg-blue-600 text-white', () => { setCurrentView('portal'); setPortalTab('dashboard'); }],
               ] as const).map(([id, label, on, fn]) => {
-                const active = id === 'home' ? (currentView === 'home' || currentView === 'login' || currentView === 'portal') : id === 'choose' ? (currentView === 'choose' || currentView === 'customer') : currentView === 'store';
+                const active = id === 'home' ? (currentView === 'home' || currentView === 'login') : id === 'choose' ? (currentView === 'choose' || currentView === 'customer') : id === 'portal' ? currentView === 'portal' : currentView === 'store';
                 return (
                   <button key={id} onClick={() => { setStartSignup(false); fn(); }}
                     className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg font-bold transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${
@@ -1000,12 +1001,6 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
 
       {(currentView === 'home' || currentView === 'store') && (
         <div className="space-y-16 pb-20 relative">
-
-          {/* Reseller entry bar */}
-          {!customerHome && (<div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-3 px-4 pt-6">
-            <button onClick={() => { setStartSignup(false); setCurrentView('login'); }} className="rounded-xl bg-amber-500 px-6 py-2.5 text-sm font-black text-slate-950 shadow hover:bg-amber-400">Reseller login</button>
-            <button onClick={() => { setStartSignup(true); setCurrentView('login'); }} className="rounded-xl bg-emerald-500 px-6 py-2.5 text-sm font-black text-slate-950 shadow hover:bg-emerald-400">Create reseller account</button>
-          </div>)}
 
           {/* Floating Persistent Theme Toggle Button (Mobile & Desktop Visible) */}
           <div className="fixed bottom-6 left-6 z-50 animate-bounce duration-1000">
