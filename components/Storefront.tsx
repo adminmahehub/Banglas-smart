@@ -263,8 +263,26 @@ export function AccountTypeSelect({ value, onChange, className }: { value: 'rese
   );
 }
 
-export function CustomerAccess({ theme, onBack, onAccountType }: { theme: 'dark' | 'light'; onBack: () => void; onAccountType?: (v: 'reseller' | 'customer') => void }) {
-  const dark = theme === 'dark';
+// Phone numbers pasted from WhatsApp often carry invisible marks or Bengali/Arabic digits. Keep digits 0-9 only.
+export function cleanPhone(v: string): string {
+  let out = '';
+  for (const ch of String(v || '')) {
+    const c = ch.codePointAt(0) || 0;
+    if (c >= 0x09e6 && c <= 0x09ef) out += String(c - 0x09e6);        // Bengali digits
+    else if (c >= 0x0660 && c <= 0x0669) out += String(c - 0x0660);   // Arabic-Indic digits
+    else if (c >= 0x06f0 && c <= 0x06f9) out += String(c - 0x06f0);   // Persian digits
+    else if (c >= 0xff10 && c <= 0xff19) out += String(c - 0xff10);   // full-width digits
+    else if (c >= 0x30 && c <= 0x39) out += ch;
+  }
+  return out.replace(/^00+/, '');
+}
+
+const PANEL_LIGHT = { '--bg': '#f4f6fb', '--card': '#ffffff', '--ink': '#1b2140', '--mut': '#7b83a6', '--line': '#e6e9f4', '--soft': '#eef1fb' } as React.CSSProperties;
+const pCard = 'rounded-2xl bg-[var(--card)] border border-[var(--line)] shadow-[0_8px_30px_rgba(60,72,140,0.07)]';
+const pInp = 'w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3.5 py-2.5 text-sm text-[var(--ink)] outline-none focus:border-indigo-400';
+const pPrimary = 'inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 transition hover:brightness-110 active:scale-95 disabled:opacity-60';
+
+export function CustomerAccess({ onBack, onAccountType }: { theme?: 'dark' | 'light'; onBack: () => void; onAccountType?: (v: 'reseller' | 'customer') => void }) {
   const [tab, setTab] = useState<'new' | 'link'>('new');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -273,12 +291,10 @@ export function CustomerAccess({ theme, onBack, onAccountType }: { theme: 'dark'
   const [err, setErr] = useState('');
   const [done, setDone] = useState('');
   const [doneCode, setDoneCode] = useState('');
-  const box = dark ? 'bg-[#0f172f] border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-sm';
-  const inp = `w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none ${dark ? 'border-slate-700 bg-[#070b18] text-white' : 'border-slate-300 bg-white text-slate-900'}`;
 
   async function start() {
     setErr('');
-    const ph = phone.replace(/[\s()+-]/g, '');
+    const ph = cleanPhone(phone);
     if (name.trim().length < 2) return setErr('Please enter your name');
     if (!/^[1-9][0-9]{7,14}$/.test(ph)) return setErr('Enter country code and number together, without +. Example: 966501234567 (Saudi), 8801712345678 (Bangladesh), 60123456789 (Malaysia)');
     setBusy(true);
@@ -299,21 +315,24 @@ export function CustomerAccess({ theme, onBack, onAccountType }: { theme: 'dark'
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-14">
-      <button onClick={onBack} className={`mb-4 text-xs font-bold ${dark ? 'text-slate-400' : 'text-slate-600'}`}>← Back</button>
-      <div className={`rounded-3xl border p-6 ${box}`}>
-        {onAccountType && <AccountTypeSelect value="customer" onChange={onAccountType} className={inp} />}
-        <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-black/10 p-1 text-xs font-black">
-          <button onClick={() => { setTab('new'); setErr(''); }} className={`rounded-lg py-2 ${tab === 'new' ? 'bg-emerald-500 text-slate-950' : ''}`}>New customer</button>
-          <button onClick={() => { setTab('link'); setErr(''); }} className={`rounded-lg py-2 ${tab === 'link' ? 'bg-emerald-500 text-slate-950' : ''}`}>I have my link</button>
+    <div style={PANEL_LIGHT} className="min-h-screen grid place-items-center bg-[var(--bg)] p-4 text-[var(--ink)]">
+      <div className={`${pCard} w-full max-w-sm p-7`}>
+        <div className="mb-5 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div>
+          <div><div className="font-black">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">CUSTOMER ACCOUNT</div></div>
+        </div>
+        {onAccountType && <AccountTypeSelect value="customer" onChange={onAccountType} className={pInp} />}
+        <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-[var(--soft)] p-1 text-xs font-black">
+          <button onClick={() => { setTab('new'); setErr(''); }} className={`rounded-lg py-2 ${tab === 'new' ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow' : 'text-[var(--mut)]'}`}>New customer</button>
+          <button onClick={() => { setTab('link'); setErr(''); }} className={`rounded-lg py-2 ${tab === 'link' ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow' : 'text-[var(--mut)]'}`}>I have my link</button>
         </div>
         {tab === 'new' && !done && (
           <div className="space-y-3">
             <h3 className="text-lg font-black">Free trial account</h3>
-            <input className={inp} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
-            <input className={inp} inputMode="tel" placeholder="WhatsApp number with country code, no +" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            {err && <div className="text-xs font-bold text-rose-500">{err}</div>}
-            <button disabled={busy} onClick={start} className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 py-3 text-sm font-black text-slate-950 disabled:opacity-60">{busy ? 'Please wait…' : 'Create my account'}</button>
+            <input className={pInp} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
+            <input className={pInp} inputMode="tel" placeholder="WhatsApp number with country code, no +" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            {err && <div className="text-xs font-semibold text-rose-500">{err}</div>}
+            <button disabled={busy} onClick={start} className={pPrimary}>{busy ? 'Please wait…' : 'Create my account'}</button>
           </div>
         )}
         {tab === 'new' && done && (
@@ -321,25 +340,26 @@ export function CustomerAccess({ theme, onBack, onAccountType }: { theme: 'dark'
             <div className="text-3xl">✅</div>
             <h3 className="text-lg font-black">Your account is ready</h3>
             {doneCode && (
-              <div className="rounded-xl bg-emerald-500/15 px-4 py-3">
-                <div className="text-[11px] opacity-70">Your customer ID</div>
-                <div className="select-all font-mono text-3xl font-black tracking-[0.25em] text-emerald-400">{doneCode}</div>
-                <div className="mt-1 text-[11px] opacity-70">Send this ID to a seller on WhatsApp to activate your subscription.</div>
+              <div className="rounded-xl bg-[var(--soft)] px-4 py-3">
+                <div className="text-[11px] text-[var(--mut)]">Your customer ID</div>
+                <div className="select-all font-mono text-3xl font-black tracking-[0.25em] text-indigo-600">{doneCode}</div>
+                <div className="mt-1 text-[11px] text-[var(--mut)]">Send this ID to a seller on WhatsApp to activate your subscription.</div>
               </div>
             )}
-            <p className="text-xs opacity-70">Save this link. It is your login. Do not share it.</p>
-            <input readOnly className={inp} value={done} onFocus={(e) => e.currentTarget.select()} />
-            <a href={done} className="block w-full rounded-xl bg-blue-600 py-3 text-sm font-black text-white">Open my page</a>
+            <p className="text-xs text-[var(--mut)]">Save this link. It is your login. Do not share it.</p>
+            <input readOnly className={pInp} value={done} onFocus={(e) => e.currentTarget.select()} />
+            <a href={done} className={pPrimary}>Open my page</a>
           </div>
         )}
         {tab === 'link' && (
           <div className="space-y-3">
             <h3 className="text-lg font-black">Customer login</h3>
-            <input className={inp} placeholder="Paste your link here" value={link} onChange={(e) => setLink(e.target.value)} />
-            {err && <div className="text-xs font-bold text-rose-500">{err}</div>}
-            <button onClick={openLink} className="w-full rounded-xl bg-blue-600 py-3 text-sm font-black text-white">Open my page</button>
+            <input className={pInp} placeholder="Paste your link here" value={link} onChange={(e) => setLink(e.target.value)} />
+            {err && <div className="text-xs font-semibold text-rose-500">{err}</div>}
+            <button onClick={openLink} className={pPrimary}>Open my page</button>
           </div>
         )}
+        <button className="mt-3 w-full text-xs text-[var(--mut)]" onClick={onBack}>← Back to store</button>
       </div>
     </div>
   );

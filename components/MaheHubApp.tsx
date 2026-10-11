@@ -13,7 +13,7 @@ import {
   CreditPackage
 } from '../lib/suauthData';
 import ResellerPanel from './ResellerPanel';
-import { CustomerAccess, parsePlans } from './Storefront';
+import { CustomerAccess, parsePlans, cleanPhone } from './Storefront';
 import { supabase } from '../lib/supabase';
 import { 
   LayoutDashboard, 
@@ -241,7 +241,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
   const [trialCode, setTrialCode] = useState('');
   const submitFreeTrial = async () => {
     setTrialErr('');
-    const ph = trialPhone.replace(/[\s()+-]/g, '');
+    const ph = cleanPhone(trialPhone);
     if (trialName.trim().length < 2) { setTrialErr('Please enter your name'); return; }
     if (!/^[1-9][0-9]{7,14}$/.test(ph)) { setTrialErr('Enter country code and number together, without +. Example: 966501234567 (Saudi), 8801712345678 (Bangladesh), 923001234567 (Pakistan)'); return; }
     setTrialBusy(true);
@@ -1006,7 +1006,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
       {/* 1. VIEW: PUBLIC TELECOM STOREFRONT (Fast, Secure, Smart DNS) */}
       {/* ========================================================================= */}
       {currentView === 'account' && (accountType === 'customer'
-        ? <CustomerAccess theme={theme} onBack={() => setCurrentView('store')} onAccountType={setAccountType} />
+        ? <CustomerAccess onBack={() => setCurrentView('store')} onAccountType={setAccountType} />
         : <ResellerPanel startSignup={startSignup} onAccountType={setAccountType} onLogout={() => setCurrentView('store')} onStorefront={goHome} />)}
 
       {(currentView === 'home' || currentView === 'store') && (
