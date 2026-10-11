@@ -9,7 +9,7 @@ const ACT = FN + '/dns-activate';
 const QR_THEME = { '--card': '#141c38', '--line': '#232c52', '--ink': '#eef1ff', '--mut': '#97a0c8', '--soft': '#1b2547' } as React.CSSProperties;
 
 type Info = {
-  found: boolean; valid?: boolean; status?: string; blocked?: boolean; phone_hint?: string;
+  found: boolean; valid?: boolean; status?: string; blocked?: boolean; phone_hint?: string; code?: string;
   expiry_date?: string; days_left?: number; bound_ip?: string | null; hostname?: string; activate_url?: string;
 };
 
@@ -169,6 +169,14 @@ export default function CustomerPage() {
             {act === 'locked' && (
               <div className="mb-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-300">
                 This DNS is locked to another device. Please contact your seller to unlock it.
+              </div>
+            )}
+
+            {info.code && (
+              <div className={`${card} mb-4 text-center`}>
+                <div className="text-xs text-[#97a0c8]">Your customer ID</div>
+                <div className="my-1 select-all font-mono text-3xl font-black tracking-[0.25em] text-emerald-400">{info.code}</div>
+                <p className="text-xs text-[#97a0c8]">{info.valid ? 'Keep this ID. Send it to your seller on WhatsApp when you want to renew.' : 'Send this ID to your seller on WhatsApp. They will activate your subscription.'}</p>
               </div>
             )}
 
