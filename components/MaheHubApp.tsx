@@ -227,6 +227,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
   const [trialBusy, setTrialBusy] = useState(false);
   const [trialErr, setTrialErr] = useState('');
   const [trialLink, setTrialLink] = useState('');
+  const [trialCode, setTrialCode] = useState('');
   const submitFreeTrial = async () => {
     setTrialErr('');
     const ph = trialPhone.replace(/[\s()+-]/g, '');
@@ -237,6 +238,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
     setTrialBusy(false);
     if (error || !data?.token) { setTrialErr(error?.message || 'Could not create the trial. Please try again.'); return; }
     setTrialLink(`${window.location.origin}/c/?t=${data.token}`);
+    setTrialCode(data.code || '');
   };
   const [homeInfo, setHomeInfo] = useState<{ found: boolean; valid?: boolean; hostname?: string; phone_hint?: string; expiry_date?: string; days_left?: number } | null>(null);
   const [homeChecking, setHomeChecking] = useState(false);
@@ -1285,6 +1287,13 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
               ) : (
                 <div className="space-y-3">
                   <div className="rounded-xl bg-emerald-500/15 px-4 py-3 text-sm font-bold text-emerald-300">Your free trial is ready. It works for 1 hour.</div>
+                  {trialCode && (
+                    <div className="rounded-xl border border-emerald-500/40 px-4 py-3 text-center">
+                      <div className="text-[11px] text-emerald-300/80">Your customer ID</div>
+                      <div className="select-all font-mono text-3xl font-black tracking-[0.25em] text-emerald-400">{trialCode}</div>
+                      <div className="mt-1 text-[11px] text-slate-400">Send this ID to a seller on WhatsApp to activate your subscription.</div>
+                    </div>
+                  )}
                   <a href={trialLink} className="block w-full text-center py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm">Open my setup page</a>
                   <button onClick={() => copyText(trialLink, 'trial-link-copy')} className="w-full py-2.5 rounded-xl border border-emerald-500/40 text-emerald-300 font-bold text-xs">
                     {copiedKey === 'trial-link-copy' ? 'Link copied!' : 'Copy my personal link (save it)'}

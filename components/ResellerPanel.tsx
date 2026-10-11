@@ -64,6 +64,12 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
   const [auth, setAuth] = useState({ email: '', password: '', name: '', whatsapp: '', signup: !!startSignup });
   const [msg, setMsg] = useState('');
   const [creditTo, setCreditTo] = useState('');
+  const [actOpen, setActOpen] = useState(false);
+  const [actCode, setActCode] = useState('');
+  const [actMonths, setActMonths] = useState(1);
+  const [actInfo, setActInfo] = useState<any>(null);
+  const [actBusy, setActBusy] = useState(false);
+  const [actErr, setActErr] = useState('');
   const [pName, setPName] = useState('');
   const [pWa, setPWa] = useState('');
   const credits = Number(prof?.credits ?? 0);
@@ -197,6 +203,21 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => setUser(sess?.user ?? null));
     return () => sub.subscription.unsubscribe();
   }, []);
+  function closeAct() { setActOpen(false); setActCode(''); setActInfo(null); setActErr(''); setActMonths(1); }
+  async function findCustomer() {
+    setActErr(''); setActInfo(null); setActBusy(true);
+    const { data, error } = await supabase.rpc('preview_customer', { p_code: actCode });
+    setActBusy(false);
+    if (error) setActErr(error.message); else setActInfo(data);
+  }
+  async function activateCustomer() {
+    setActErr(''); setActBusy(true);
+    const { data, error } = await supabase.rpc('activate_customer', { p_code: actCode, p_months: actMonths });
+    setActBusy(false);
+    if (error) { setActErr(error.message); return; }
+    alert(`Customer ${data?.username || ''} activated for ${actMonths} month(s). Valid until ${data?.expiry_date}. The customer is now in your list.`);
+    closeAct(); load();
+  }
   useEffect(() => { if (user) load(); else { setProf(null); setAccounts([]); } }, [user]);
   useEffect(() => { if (user && tab === 'users') loadInactive(inactiveMonths); }, [user, tab, inactiveMonths]);
   useEffect(() => {
@@ -896,7 +917,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
           </>)}
 
           {tab === 'users' && (<>
-            <Head t={mode === 'vpn' ? 'VPN Users' : 'Users'} s={mode === 'vpn' ? 'WireGuard accounts with bandwidth' : 'Customers by phone number'}><button onClick={() => setModal(true)} className={primary}><UserPlus className="h-4 w-4" />Add User</button></Head>
+            <Head t={mode === 'vpn' ? 'VPN Users' : 'Users'} s={mode === 'vpn' ? 'WireGuard accounts with bandwidth' : 'Customers by phone number'}><div className="flex gap-2">{mode === 'dns' && <button onClick={() => setActOpen(true)} className={ghost}><Check className="h-4 w-4" />Activate by ID</button>}<button onClick={() => setModal(true)} className={primary}><UserPlus className="h-4 w-4" />Add User</button></div></Head>
             <div className="relative mb-4"><Search className="absolute left-3.5 top-3 h-4 w-4 text-[var(--mut)]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={mode === 'vpn' ? 'Search username…' : 'Search phone number…'} className={`${inp} pl-10`} /></div>
             <Reminders />
             <UsersTable rows={list} />
@@ -1166,6 +1187,31 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup }: {
               {err && <div className="text-sm font-semibold text-rose-500">{err}</div>}
               <button className={`${primary} w-full`} onClick={createVpn}>Create VPN account</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {actOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={closeAct}>
+          <div className={`${card} w-full max-w-sm p-6`} onClick={(e) => e.stopPropagation()} style={dark ? DARK as any : LIGHT as any}>
+            <div className="flex items-center justify-between mb-3"><h3 className="text-lg font-black">Activate customer</h3><button onClick={closeAct}><X className="h-5 w-5" /></button></div>
+            <div className="text-xs text-[var(--mut)] mb-3">Ask the customer for the 6-digit ID shown on their page. 1 credit = 1 month.</div>
+            <div className="flex gap-2 mb-3">
+              <input className={`${inp} font-mono tracking-[0.2em]`} inputMode="numeric" maxLength={6} placeholder="6-digit ID" value={actCode} onChange={(e) => { setActCode(e.target.value.replace(/\D/g, '')); setActInfo(null); setActErr(''); }} />
+              <button disabled={actBusy || actCode.length !== 6} className={`${ghost} shrink-0 disabled:opacity-50`} onClick={findCustomer}>Find</button>
+            </div>
+            {actInfo && (
+              <div className="space-y-3">
+                <div className="rounded-xl bg-[var(--soft)] px-3 py-2 text-sm">
+                  <div className="font-bold">Phone ending •••• {actInfo.phone_hint}</div>
+                  <div className="text-xs text-[var(--mut)]">{actInfo.mine ? 'Already your customer' : actInfo.trial ? 'Free trial customer' : 'New customer'} · status: {actInfo.status}</div>
+                </div>
+                <select className={inp} value={actMonths} onChange={(e) => setActMonths(Number(e.target.value))}>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''} ({isAdmin ? 'free for admin' : `${m} credit${m > 1 ? 's' : ''}`})</option>)}</select>
+                {!isAdmin && <div className="text-xs text-[var(--mut)]">Your credits: {credits}{credits < actMonths ? ' — not enough for this plan' : ''}</div>}
+                <button disabled={actBusy || (!isAdmin && credits < actMonths)} className={`${primary} w-full disabled:opacity-50`} onClick={activateCustomer}>{actBusy ? 'Please wait…' : 'Activate customer'}</button>
+              </div>
+            )}
+            {actErr && <div className="mt-3 text-xs font-bold text-rose-500">{actErr}</div>}
           </div>
         </div>
       )}

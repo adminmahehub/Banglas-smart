@@ -260,6 +260,7 @@ export function CustomerAccess({ theme, onBack }: { theme: 'dark' | 'light'; onB
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [done, setDone] = useState('');
+  const [doneCode, setDoneCode] = useState('');
   const box = dark ? 'bg-[#0f172f] border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-sm';
   const inp = `w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none ${dark ? 'border-slate-700 bg-[#070b18] text-white' : 'border-slate-300 bg-white text-slate-900'}`;
 
@@ -273,6 +274,7 @@ export function CustomerAccess({ theme, onBack }: { theme: 'dark' | 'light'; onB
     setBusy(false);
     if (error || !data?.token) return setErr(error?.message || 'Could not create the trial. Please try again.');
     setDone(`${window.location.origin}/c/?t=${data.token}`);
+    setDoneCode(data.code || '');
   }
   function openLink() {
     setErr('');
@@ -305,6 +307,13 @@ export function CustomerAccess({ theme, onBack }: { theme: 'dark' | 'light'; onB
           <div className="space-y-3 text-center">
             <div className="text-3xl">✅</div>
             <h3 className="text-lg font-black">Your account is ready</h3>
+            {doneCode && (
+              <div className="rounded-xl bg-emerald-500/15 px-4 py-3">
+                <div className="text-[11px] opacity-70">Your customer ID</div>
+                <div className="select-all font-mono text-3xl font-black tracking-[0.25em] text-emerald-400">{doneCode}</div>
+                <div className="mt-1 text-[11px] opacity-70">Send this ID to a seller on WhatsApp to activate your subscription.</div>
+              </div>
+            )}
             <p className="text-xs opacity-70">Save this link. It is your login. Do not share it.</p>
             <input readOnly className={inp} value={done} onFocus={(e) => e.currentTarget.select()} />
             <a href={done} className="block w-full rounded-xl bg-blue-600 py-3 text-sm font-black text-white">Open my page</a>
