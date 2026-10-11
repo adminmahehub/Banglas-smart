@@ -875,10 +875,10 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
               {([
                 ['store', '🏠 Home', 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950', () => setCurrentView('store')],
                 ['home', '🔑 Reseller Login', 'bg-amber-500 text-slate-950', () => setCurrentView('login')],
-                ['choose', '➕ Create Account', 'bg-emerald-500 text-slate-950', () => setCurrentView('choose')],
+                ['choose', '➕ Create Account', 'bg-emerald-500 text-slate-950', () => { if (currentView === 'home' || currentView === 'login' || currentView === 'portal') { setStartSignup(true); setCurrentView('login'); } else { setCurrentView('customer'); } }],
                 ['portal', '📊 Portal Suite', 'bg-blue-600 text-white', () => { setCurrentView('portal'); setPortalTab('dashboard'); }],
               ] as const).map(([id, label, on, fn]) => {
-                const active = id === 'home' ? (currentView === 'home' || currentView === 'login') : id === 'choose' ? (currentView === 'choose' || currentView === 'customer') : id === 'portal' ? currentView === 'portal' : currentView === 'store';
+                const active = id === 'home' ? (currentView === 'home' || (currentView === 'login' && !startSignup)) : id === 'choose' ? (currentView === 'customer' || (startSignup && currentView === 'login')) : id === 'portal' ? currentView === 'portal' : currentView === 'store';
                 return (
                   <button key={id} onClick={() => { setStartSignup(false); fn(); }}
                     className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg font-bold transition-all text-xs flex items-center justify-center gap-1.5 whitespace-nowrap ${
@@ -996,7 +996,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
         <AccountChoose theme={theme} onCustomer={() => setCurrentView('customer')} onReseller={() => { setStartSignup(true); setCurrentView('login'); }} />
       )}
       {currentView === 'customer' && (
-        <CustomerAccess theme={theme} onBack={() => setCurrentView('choose')} />
+        <CustomerAccess theme={theme} onBack={() => setCurrentView('store')} />
       )}
 
       {(currentView === 'home' || currentView === 'store') && (
