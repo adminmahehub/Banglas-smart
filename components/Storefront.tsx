@@ -291,6 +291,21 @@ export function CustomerAccess({ onBack, onAccountType }: { theme?: 'dark' | 'li
   const [err, setErr] = useState('');
   const [done, setDone] = useState('');
   const [doneCode, setDoneCode] = useState('');
+  const [codeCopied, setCodeCopied] = useState(false);
+  const copyCode = async () => {
+    const text = String(doneCode);
+    let ok = false;
+    try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); ok = true; } } catch { /* fall back below */ }
+    if (!ok) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+        ok = document.execCommand('copy'); document.body.removeChild(ta);
+      } catch { /* ignore */ }
+    }
+    if (ok) { setCodeCopied(true); setTimeout(() => setCodeCopied(false), 1500); }
+  };
 
   async function start() {
     setErr('');
@@ -340,11 +355,12 @@ export function CustomerAccess({ onBack, onAccountType }: { theme?: 'dark' | 'li
             <div className="text-3xl">✅</div>
             <h3 className="text-lg font-black">Your account is ready</h3>
             {doneCode && (
-              <div className="rounded-xl bg-[var(--soft)] px-4 py-3">
+              <button type="button" onClick={copyCode} aria-label="Copy customer ID" className="block w-full rounded-xl bg-[var(--soft)] px-4 py-3 text-center active:scale-[0.99]">
                 <div className="text-[11px] text-[var(--mut)]">Your customer ID</div>
                 <div className="select-all font-mono text-3xl font-black tracking-[0.25em] text-indigo-600">{doneCode}</div>
+                <div className={`mt-1 text-[11px] font-bold ${codeCopied ? 'text-emerald-500' : 'text-indigo-500'}`}>{codeCopied ? '✓ Copied' : 'Tap to copy'}</div>
                 <div className="mt-1 text-[11px] text-[var(--mut)]">Send this ID to a seller on WhatsApp to activate your subscription.</div>
-              </div>
+              </button>
             )}
             <p className="text-xs text-[var(--mut)]">Save this link. It is your login. Do not share it.</p>
             <input readOnly className={pInp} value={done} onFocus={(e) => e.currentTarget.select()} />
