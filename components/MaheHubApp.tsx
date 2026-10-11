@@ -13,7 +13,7 @@ import {
   CreditPackage
 } from '../lib/suauthData';
 import ResellerPanel from './ResellerPanel';
-import { StoreHome, AccountChoose, CustomerAccess } from './Storefront';
+import { AccountChoose, CustomerAccess, parsePlans } from './Storefront';
 import { supabase } from '../lib/supabase';
 import { 
   LayoutDashboard, 
@@ -208,6 +208,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
   // Navigation: 'home' | 'login' | 'portal'
   const [currentView, setCurrentView] = useState<'store' | 'home' | 'choose' | 'customer' | 'login' | 'portal'>(initialView === 'resellerHome' ? 'home' : 'store');
   const [startSignup, setStartSignup] = useState(false);
+  const customerHome = currentView === 'store';
 
   // Active Role in Portal: 'reseller' or 'admin'
   const [portalRole, setPortalRole] = useState<'reseller' | 'admin'>('reseller');
@@ -990,9 +991,6 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
       {/* ========================================================================= */}
       {/* 1. VIEW: PUBLIC TELECOM STOREFRONT (Fast, Secure, Smart DNS) */}
       {/* ========================================================================= */}
-      {currentView === 'store' && (
-        <StoreHome theme={theme} site={site} onCustomer={() => setCurrentView('customer')} onCreate={() => setCurrentView('choose')} onReseller={() => setCurrentView('home')} />
-      )}
       {currentView === 'choose' && (
         <AccountChoose theme={theme} onCustomer={() => setCurrentView('customer')} onReseller={() => { setStartSignup(true); setCurrentView('login'); }} />
       )}
@@ -1000,14 +998,14 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
         <CustomerAccess theme={theme} onBack={() => setCurrentView('choose')} />
       )}
 
-      {currentView === 'home' && (
+      {(currentView === 'home' || currentView === 'store') && (
         <div className="space-y-16 pb-20 relative">
 
           {/* Reseller entry bar */}
-          <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-3 px-4 pt-6">
+          {!customerHome && (<div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-3 px-4 pt-6">
             <button onClick={() => { setStartSignup(false); setCurrentView('login'); }} className="rounded-xl bg-amber-500 px-6 py-2.5 text-sm font-black text-slate-950 shadow hover:bg-amber-400">Reseller login</button>
             <button onClick={() => { setStartSignup(true); setCurrentView('login'); }} className="rounded-xl bg-emerald-500 px-6 py-2.5 text-sm font-black text-slate-950 shadow hover:bg-emerald-400">Create reseller account</button>
-          </div>
+          </div>)}
 
           {/* Floating Persistent Theme Toggle Button (Mobile & Desktop Visible) */}
           <div className="fixed bottom-6 left-6 z-50 animate-bounce duration-1000">
@@ -1052,16 +1050,17 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 <h1 className={`text-3xl sm:text-5xl md:text-6xl font-black tracking-tight leading-tight ${
                   theme === 'dark' ? 'text-white' : 'text-slate-900'
                 }`}>
+                  {customerHome && site.store_headline ? site.store_headline : (<>
                   Fast • Secure • Private <br className="hidden sm:block" />
                   <span className="bg-gradient-to-r from-cyan-500 via-teal-500 to-emerald-500 bg-clip-text text-transparent">
                     Smart DNS Unblocker
-                  </span>
+                  </span></>)}
                 </h1>
 
                 <p className={`text-sm sm:text-base md:text-lg max-w-2xl mx-auto leading-relaxed ${
                   theme === 'dark' ? 'text-slate-300' : 'text-slate-700 font-medium'
                 }`}>
-                  সৌদি আরব, মালয়েশিয়া ও মধ্যপ্রাচ্য প্রবাসীদের জন্য কোনো ভিপিএন অ্যাপ ছাড়াই <strong>bKash, Nagad, Rocket, Upay, Alaap, Brilliant ও WhatsApp Calling</strong> সম্পূর্ণ দেশীয় স্পিডে ব্যবহার করুন।
+                  {customerHome && site.store_subline ? site.store_subline : (<>সৌদি আরব, মালয়েশিয়া ও মধ্যপ্রাচ্য প্রবাসীদের জন্য কোনো ভিপিএন অ্যাপ ছাড়াই <strong>bKash, Nagad, Rocket, Upay, Alaap, Brilliant ও WhatsApp Calling</strong> সম্পূর্ণ দেশীয় স্পিডে ব্যবহার করুন।</>)}
                 </p>
               </div>
 
@@ -1150,6 +1149,12 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                   <span>Download iOS Profile</span>
                 </a>
 
+                {customerHome ? (
+                <a href="#rates-section" className="px-8 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black text-sm shadow-xl shadow-blue-600/25 transition-all flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-300" />
+                  <span>See rates</span>
+                </a>
+                ) : (
                 <button
                   onClick={() => {
                     setCurrentView('portal');
@@ -1161,6 +1166,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                   <Sparkles className="h-4 w-4 text-amber-300" />
                   <span>Create Account (1 Credit)</span>
                 </button>
+                )}
               </div>
 
             </div>
@@ -1314,6 +1320,29 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
               </h2>
             </div>
 
+            {customerHome ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-left">
+              {parsePlans(site.store_plans).map((p) => (
+                <div key={p.label} className={`rounded-3xl p-6 border flex flex-col justify-between space-y-4 transition-all relative ${
+                  p.hot ? (theme === 'dark' ? 'bg-gradient-to-b from-[#16234b] to-[#0c142b] border-2 border-cyan-400/80 shadow-2xl' : 'bg-cyan-50/50 border-2 border-cyan-500 shadow-cyan-100')
+                        : (theme === 'dark' ? 'bg-[#0f172f] border-slate-800' : 'bg-white border-slate-200 shadow-sm')
+                }`}>
+                  {p.hot && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-cyan-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow">★ সর্বাধিক জনপ্রিয়</div>
+                  )}
+                  <div className="space-y-2 pt-1">
+                    <span className={`text-xs font-bold block ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>{p.label}</span>
+                    <div className={`text-3xl font-black font-mono ${p.hot ? (theme === 'dark' ? 'text-cyan-300' : 'text-cyan-700') : 'text-emerald-500'}`}>{p.price}</div>
+                    {p.note && <span className={`text-[11px] block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{p.note}</span>}
+                  </div>
+                  <a href={`https://wa.me/${waBd}?text=${encodeURIComponent(`Hello, I want the ${p.label} plan (${p.price}).`)}`} target="_blank" rel="noreferrer"
+                    className={`w-full text-center py-2.5 rounded-xl font-bold text-xs transition-all ${p.hot ? 'bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-black shadow-lg' : theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-900'}`}>
+                    অর্ডার করুন
+                  </a>
+                </div>
+              ))}
+            </div>
+            ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-left">
               <div className={`rounded-3xl p-6 border flex flex-col justify-between space-y-4 transition-all ${
                 theme === 'dark' ? 'bg-[#0f172f] border-slate-800' : 'bg-white border-slate-200 shadow-sm'
@@ -1418,6 +1447,10 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 </button>
               </div>
             </div>
+            )}
+            {customerHome && site.store_note && (
+              <p className={`text-xs max-w-xl mx-auto ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{site.store_note}</p>
+            )}
           </section>
 
           {/* SETUP GUIDES */}
@@ -1499,6 +1532,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
             </div>
           </section>
 
+          {!customerHome && (<>
           {/* RESELLER OPPORTUNITY */}
           <section id="reseller-section" className="max-w-4xl mx-auto px-4 sm:px-6">
             <div className="bg-gradient-to-r from-amber-950/40 via-[#181f3d] to-blue-950/40 rounded-3xl p-6 sm:p-10 border border-amber-500/30 shadow-2xl space-y-6">
@@ -1802,6 +1836,8 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
 
             </div>
           </section>
+
+          </>)}
 
           {/* ========================================================================= */}
           {/* PROFESSIONAL ENTERPRISE FOOTER & GLOBAL CONTACT HUB */}
@@ -2112,7 +2148,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 </div>
 
                 {/* Col 3: Reseller Solutions */}
-                <div className="space-y-3">
+                {!customerHome && (<div className="space-y-3">
                   <h5 className={`font-black text-xs uppercase tracking-wider ${
                     theme === 'dark' ? 'text-white' : 'text-slate-900'
                   }`}>
@@ -2144,7 +2180,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                       <span>Dedicated Static Residential IPs</span>
                     </li>
                   </ul>
-                </div>
+                </div>)}
 
                 {/* Col 4: Platform Navigation */}
                 <div className="space-y-3">
