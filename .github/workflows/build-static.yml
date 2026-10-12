@@ -1,5 +1,4 @@
 # Builds the MaheHub panel as static files (the "out" folder) so they can be uploaded to Hostinger.
-# Place this file in the GitHub repo at:  .github/workflows/build-static.yml
 # Run it from GitHub: Actions tab -> "Build static site for Hostinger" -> Run workflow.
 name: Build static site for Hostinger
 on:
@@ -21,9 +20,14 @@ jobs:
         run: |
           test -f out/index.html
           test -f out/c/index.html
-          ls out
+          test -f out/robots.txt
+          test -f out/sitemap.xml
+          test -f out/og-image.png
+          test -f out/.htaccess
+          ls -a out
       - uses: actions/upload-artifact@v4
         with:
           name: mahehub-static-site
           path: out/
+          include-hidden-files: true
           retention-days: 7
