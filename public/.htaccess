@@ -1,0 +1,19 @@
+# MaheHub static site (Hostinger). If the site ever shows a 500 error, delete this file.
+ErrorDocument 404 /404.html
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml application/javascript application/json image/svg+xml
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Private pages must never be indexed (customer links carry a private token)
+  SetEnvIf Request_URI "^/(c|admin)(/|$)" PRIVATE_PAGE
+  Header set X-Robots-Tag "noindex, nofollow, noarchive" env=PRIVATE_PAGE
+
+  # Files in /_next/static/ have a fingerprint in their name, so they can be cached for a long time
+  SetEnvIf Request_URI "^/_next/static/" HASHED_FILE
+  Header set Cache-Control "public, max-age=31536000, immutable" env=HASHED_FILE
+
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
