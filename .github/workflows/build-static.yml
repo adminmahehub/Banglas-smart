@@ -13,7 +13,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm install --no-audit --no-fund --legacy-peer-deps
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://ssaqdsqopxclkplstpzj.supabase.co
