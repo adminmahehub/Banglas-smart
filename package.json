@@ -7,9 +7,22 @@
     "build": "NODE_ENV=production next build",
     "start": "next start",
     "lint": "eslint .",
-    "clean": "next clean"
+    "clean": "next clean",
+    "build:app": "NEXT_PUBLIC_APP_MODE=native NODE_ENV=production next build",
+    "app:assets": "capacitor-assets generate --iconBackgroundColor '#0c1226' --splashBackgroundColor '#0c1226'",
+    "app:sync": "npm run build:app && cap sync"
   },
   "dependencies": {
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/app-launcher": "^7.0.0",
+    "@capacitor/clipboard": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/haptics": "^7.0.0",
+    "@capacitor/preferences": "^7.0.0",
+    "@capacitor/share": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0",
     "@google/genai": "^2.4.0",
     "@hookform/resolvers": "^5.2.1",
     "@supabase/supabase-js": "^2.45.0",
@@ -25,6 +38,10 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
     "@tailwindcss/postcss": "4.1.11",
     "@tailwindcss/typography": "^0.5.19",
     "@types/node": "^20",

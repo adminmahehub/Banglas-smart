@@ -5,3 +5,7 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Capacitor native projects are generated in CI (npx cap add)
+/android/
+/ios/

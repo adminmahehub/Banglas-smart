@@ -1,0 +1,66 @@
+# Builds the MaheHub mobile app (Capacitor). Run: GitHub -> Actions -> "Build mobile app" -> Run workflow.
+# Android: debug APK (for testing on a phone) + signed release AAB (for Play Store) if the signing secrets are set.
+# iOS: builds for the simulator to prove the project compiles. TestFlight/App Store needs the Apple secrets (see APP-BUILD.md).
+name: Build mobile app
+on:
+  workflow_dispatch:
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://ssaqdsqopxclkplstpzj.supabase.co
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - run: npm install --no-audit --no-fund --legacy-peer-deps
+      - run: npm run build:app
+      - run: npx cap add android
+      - run: python3 scripts/patch-android.py
+      - run: npm run app:assets
+      - run: npx cap sync android
+      - name: Version
+        run: |
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/" android/app/build.gradle
+      - name: Debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+      - name: Signed release AAB
+        if: env.HAS_KEYSTORE == 'true'
+        working-directory: android
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/release.jks" \
+            -Pandroid.injected.signing.store.password="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias="${{ secrets.ANDROID_KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="${{ secrets.ANDROID_KEY_PASSWORD }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mahehub-android
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/bundle/release/*.aab
+          retention-days: 14
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm install --no-audit --no-fund --legacy-peer-deps
+      - run: npm run build:app
+      - run: npx cap add ios
+      - run: python3 scripts/patch-ios.py
+      - run: npm run app:assets
+      - run: npx cap sync ios
+      - name: Build for simulator (compile check)
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build
