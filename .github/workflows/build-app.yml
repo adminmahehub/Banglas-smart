@@ -61,6 +61,11 @@ jobs:
       - name: Build for simulator (compile check)
         working-directory: ios/App
         run: |
+          set -o pipefail
           xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO build
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
+      - name: Show build errors
+        if: failure()
+        run: |
+          grep -E "error:|BUILD FAILED|\*\* BUILD" "$RUNNER_TEMP/xcodebuild.log" | sort -u | head -15 | while IFS= read -r l; do echo "::error::${l}"; done
