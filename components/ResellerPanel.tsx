@@ -8,6 +8,8 @@ import type { VpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
 import { COUNTRIES } from '../lib/countries';
 import QrModal from './QrModal';
+import { siteOrigin } from '../lib/siteOrigin';
+import { openLink, saveTextFile } from '../lib/nativeBridge';
 
 type Tab = 'dashboard' | 'users' | 'resellers' | 'credit' | 'site' | 'activity' | 'api' | 'profile';
 const NAV: { id: Tab; label: string; icon: any }[] = [
@@ -51,9 +53,9 @@ async function shrinkImage(file: File): Promise<Blob> {
 }
 function copy(t: string) { try { navigator.clipboard?.writeText(t); } catch { /* ignore */ } }
 
-export default function ResellerPanel({ onLogout, onStorefront, startSignup, adminOnly, onAccountType }: { onLogout: () => void; onStorefront: () => void; startSignup?: boolean; adminOnly?: boolean; onAccountType?: (v: 'reseller' | 'customer') => void }) {
+export default function ResellerPanel({ onLogout, onStorefront, startSignup, adminOnly, onAccountType, initialDark }: { onLogout: () => void; onStorefront: () => void; startSignup?: boolean; adminOnly?: boolean; onAccountType?: (v: 'reseller' | 'customer') => void; initialDark?: boolean }) {
   const [tab, setTab] = useState<Tab>('dashboard');
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(!!initialDark);
   const [menu, setMenu] = useState(false);
   const [accounts, setAccounts] = useState<VpnAccount[]>([]);
   const [mode, setMode] = useState<'dns' | 'vpn'>('dns');
@@ -145,7 +147,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     serverHost: r.server_host, days: r.days, bandwidthType: r.bandwidth_type, bandwidthGb: r.bandwidth_gb, usedMb: Number(r.used_mb),
     totalPriceBdt: Number(r.price_bdt), startDate: r.start_date,
     expiryDate: new Date(r.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase(),
-    status: r.status, importLink: `${window.location.origin}/?view=user_import&user=${encodeURIComponent(r.username)}`,
+    status: r.status, importLink: `${siteOrigin()}/?view=user_import&user=${encodeURIComponent(r.username)}`,
     multiServerFailover: pool.length ? pool : (r.server_host ? [r.server_host] : []),
     service: r.service === 'vpn' ? 'vpn' : 'dns',
     wgLocked: !!r.wg_locked, wgSeen: r.wg_last_handshake ?? null, wgNote: r.wg_lock_note ?? null,
@@ -273,7 +275,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     await load(); setModal(false); setTrial(false); setForm({ country: form.country, phone: '', months: 1 });
     const lk = await supabase.rpc('generate_customer_link', { p_username: data.username });
     if (lk.error || !lk.data) { alert('Account created, but the link could not be made: ' + (lk.error?.message || 'unknown error') + '. Use the Customer link button in the Users list.'); return; }
-    setDnsLink({ username: data.username, url: `${window.location.origin}/c/?t=${lk.data}` });
+    setDnsLink({ username: data.username, url: `${siteOrigin()}/c/?t=${lk.data}` });
   }
   async function createVpn() {
     setErr('');
@@ -306,7 +308,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   async function viewProof(path: string) {
     const { data, error } = await supabase.storage.from('payment-proofs').createSignedUrl(path, 300);
     if (error || !data?.signedUrl) { alert(error?.message || 'Could not open the screenshot'); return; }
-    window.open(data.signedUrl, '_blank');
+    openLink(data.signedUrl);
   }
   async function createReseller() {
     setRsErr('');
@@ -419,7 +421,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     if (!confirm('Create a new customer link for ' + a.username + '? If a link was sent before, it will stop working.')) return;
     const { data, error } = await supabase.rpc('generate_customer_link', { p_username: a.username });
     if (error || !data) { alert('Could not create the link: ' + (error?.message || 'unknown error')); return; }
-    setDnsLink({ username: a.username, url: `${window.location.origin}/c/?t=${data}` });
+    setDnsLink({ username: a.username, url: `${siteOrigin()}/c/?t=${data}` });
   }
   async function loadDnsServers() {
     const [sv, ld] = await Promise.all([
@@ -597,13 +599,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const download = async (a: VpnAccount, forceWg = false) => {
     const text = await fetchProfile(a, forceWg);
     if (text === null) return;
-    // application/octet-stream: the phone saves it as a real .conf file instead of opening it as text (.conf.txt)
-    const blob = new Blob([text], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const el = document.createElement('a');
-    el.href = url; el.download = `${a.username.slice(0, 15)}.conf`; el.style.display = 'none';
-    document.body.appendChild(el); el.click(); document.body.removeChild(el);
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    try { await saveTextFile(`${a.username.slice(0, 15)}.conf`, text); } catch { alert('Could not save the file.'); }
   };
 
   const Stat = ({ icon: I, label, value, tone }: { icon: any; label: string; value: string | number; tone: string }) => (
@@ -965,7 +961,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                 <tbody>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)', _me: true }] : []), ...((stats?.per_reseller || resellers) as any[])].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{r._me ? '-' : (r.upline_name || 'Admin')}</td><td className="px-4 py-3">{r._me ? '-' : `${r.direct_count ?? 0} direct · ${r.team_count ?? 0} total`}</td><td className="px-4 py-3">{r._me ? '-' : Number(r.team_sales_bdt ?? 0).toLocaleString()}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3"><button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button></td></tr>)}
                   {resellers.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-[var(--mut)]">No resellers</td></tr>}</tbody></table></div>
             ) : (<>
-              {refInfo?.code && <div className={`${card} p-4 mb-4 flex flex-wrap items-center gap-3 text-sm`}><Link2 className="h-4 w-4 text-indigo-500" /><span className="text-[var(--mut)]">Your invite link:</span><b className="break-all">{typeof window !== 'undefined' ? window.location.origin : ''}/?ref={refInfo.share_code || refInfo.code}</b><button className={`${ghost} !py-1.5 ml-auto`} onClick={() => flash('ref2', `${window.location.origin}/?ref=${refInfo.share_code || refInfo.code}`)}>{copied === 'ref2' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>}
+              {refInfo?.code && <div className={`${card} p-4 mb-4 flex flex-wrap items-center gap-3 text-sm`}><Link2 className="h-4 w-4 text-indigo-500" /><span className="text-[var(--mut)]">Your invite link:</span><b className="break-all">{typeof window !== 'undefined' ? siteOrigin() : ''}/?ref={refInfo.share_code || refInfo.code}</b><button className={`${ghost} !py-1.5 ml-auto`} onClick={() => flash('ref2', `${siteOrigin()}/?ref=${refInfo.share_code || refInfo.code}`)}>{copied === 'ref2' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>}
               <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[560px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Level', 'Credits bought', 'Customers', 'Joined'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
                 <tbody>{team.map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.level === 1 ? 'Direct' : `Level ${r.level}`}</td><td className="px-4 py-3">{r.credits_bought}</td><td className="px-4 py-3">{r.customers}</td><td className="px-4 py-3">{new Date(r.joined).toLocaleDateString()}</td></tr>)}
                   {team.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-[var(--mut)]">No one has joined through your link yet</td></tr>}</tbody></table></div>
@@ -1177,8 +1173,8 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                 <h3 className="font-black text-[var(--ink)]">Refer & earn</h3>
                 <div className="text-xs text-[var(--mut)]">Share your link. When a reseller you invite makes their first top-up of 20+ credits, you get 10% of it as free credits (20 → 2, 50 → 5, 100 → 10).</div>
                 <div className="flex items-center gap-2">
-                  <input readOnly className={inp} value={`${typeof window !== 'undefined' ? window.location.origin : ''}/?ref=${refInfo.share_code || refInfo.code}`} />
-                  <button className={ghost} onClick={() => flash('ref', `${window.location.origin}/?ref=${refInfo.share_code || refInfo.code}`)}>{copied === 'ref' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
+                  <input readOnly className={inp} value={`${typeof window !== 'undefined' ? siteOrigin() : ''}/?ref=${refInfo.share_code || refInfo.code}`} />
+                  <button className={ghost} onClick={() => flash('ref', `${siteOrigin()}/?ref=${refInfo.share_code || refInfo.code}`)}>{copied === 'ref' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
                 </div>
                 <div className="flex gap-3 text-sm">
                   <div className="flex-1 rounded-xl bg-[var(--soft)] px-4 py-3"><div className="text-[11px] text-[var(--mut)]">Code</div><b className="break-all">{refInfo.share_code || refInfo.code}</b></div>
@@ -1260,7 +1256,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
               <div className="space-y-3 text-sm">
                 <div className="rounded-xl bg-emerald-500/15 px-4 py-3 font-bold text-emerald-500">Reseller account created.</div>
                 <div className="rounded-xl bg-[var(--soft)] px-4 py-3 space-y-1"><div>Email: <b className="break-all">{rsDone.email}</b></div><div>Password: <b className="break-all">{rsDone.password}</b></div></div>
-                <a className={`${primary} w-full`} target="_blank" rel="noreferrer" href={`https://wa.me/${rsDone.phone}?text=${encodeURIComponent(`Your MaheHub reseller account is ready.\nLogin: ${typeof window !== 'undefined' ? window.location.origin : ''}\nEmail: ${rsDone.email}\nPassword: ${rsDone.password}\nPlease change your password after the first login.`)}`}><MessageCircle className="h-4 w-4" /> Send on WhatsApp</a>
+                <a className={`${primary} w-full`} target="_blank" rel="noreferrer" href={`https://wa.me/${rsDone.phone}?text=${encodeURIComponent(`Your MaheHub reseller account is ready.\nLogin: ${typeof window !== 'undefined' ? siteOrigin() : ''}\nEmail: ${rsDone.email}\nPassword: ${rsDone.password}\nPlease change your password after the first login.`)}`}><MessageCircle className="h-4 w-4" /> Send on WhatsApp</a>
                 <button className={`${ghost} w-full`} onClick={() => setRsDone(null)}>Add another reseller</button>
               </div>
             ) : (

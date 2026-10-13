@@ -15,6 +15,7 @@ import {
 import ResellerPanel from './ResellerPanel';
 import { CustomerAccess, parsePlans, cleanPhone } from './Storefront';
 import { supabase } from '../lib/supabase';
+import { siteOrigin } from '../lib/siteOrigin';
 import { 
   LayoutDashboard, 
   Users, 
@@ -248,7 +249,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
     const { data, error } = await supabase.rpc('public_free_trial', { p_name: trialName.trim(), p_phone: ph });
     setTrialBusy(false);
     if (error || !data?.token) { setTrialErr(error?.message || 'Could not create the trial. Please try again.'); return; }
-    setTrialLink(`${window.location.origin}/c/?t=${data.token}`);
+    setTrialLink(`${siteOrigin()}/c/?t=${data.token}`);
     setTrialCode(data.code || '');
   };
   const [homeInfo, setHomeInfo] = useState<{ found: boolean; valid?: boolean; hostname?: string; phone_hint?: string; expiry_date?: string; days_left?: number } | null>(null);
