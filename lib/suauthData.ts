@@ -180,6 +180,8 @@ export interface VpnAccount {
   importLink: string;
   multiServerFailover: string[];
   service?: 'dns' | 'vpn';
+  ownerId?: string;
+  customerCode?: string | null;
 }
 
 export const CREDIT_PACKAGES: CreditPackage[] = [

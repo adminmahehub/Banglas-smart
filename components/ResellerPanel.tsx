@@ -139,6 +139,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const [cleaning, setCleaning] = useState(false);
   const [svForm, setSvForm] = useState({ name: '', host: '', tier: 'Normal', region: '' });
   const [stats, setStats] = useState<any>(null);
+  const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
   const [team, setTeam] = useState<any[]>([]);
   const [live, setLive] = useState<Record<string, any>>({});
   const [refInfo, setRefInfo] = useState<{ code: string; share_code?: string; direct_count: number; bonus_credits: number } | null>(null);
@@ -151,6 +152,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     multiServerFailover: pool.length ? pool : (r.server_host ? [r.server_host] : []),
     service: r.service === 'vpn' ? 'vpn' : 'dns',
     wgLocked: !!r.wg_locked, wgSeen: r.wg_last_handshake ?? null, wgNote: r.wg_lock_note ?? null,
+    ownerId: r.owner_id, customerCode: r.customer_code ?? null,
   });
   const load = async () => {
     const [p, v, a] = await Promise.all([
@@ -162,6 +164,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     const me = rows.find((x) => x.id === user?.id) || null;
     setProf(me); setPName(me?.name || ''); setPWa(me?.whatsapp || '');
     setResellers(me?.role === 'admin' ? rows.filter((x) => x.role === 'reseller') : []);
+    setOwnerNames(Object.fromEntries(rows.map((x: any) => [x.id, String(x.name || x.whatsapp || 'Reseller')])));
     const pl = await supabase.rpc('pool_hosts');
     const pool: string[] = Array.isArray(pl.data) ? (pl.data as string[]) : [];
     setAccounts((v.data || []).map((r: any) => toAcc(r, pool)));
@@ -248,7 +251,14 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   }, [refCode]);
 
   const modeAccounts = useMemo(() => accounts.filter((a) => (a.service || 'dns') === mode), [accounts, mode]);
-  const list = useMemo(() => modeAccounts.filter((a) => a.username.toLowerCase().includes(q.toLowerCase())), [modeAccounts, q]);
+  const list = useMemo(() => {
+    const k = q.trim().toLowerCase();
+    if (!k) return modeAccounts;
+    return modeAccounts.filter((a) =>
+      a.username.toLowerCase().includes(k)
+      || (a.customerCode || '').toLowerCase().includes(k)
+      || (isAdmin && (ownerNames[a.ownerId || ''] || '').toLowerCase().includes(k)));
+  }, [modeAccounts, q, isAdmin, ownerNames]);
   const active = modeAccounts.filter((a) => a.status === 'active').length;
   const switchMode = (m: 'dns' | 'vpn') => { setMode(m); setTab('dashboard'); setMenu(false); setQ(''); setErr(''); setModal(false); };
   useEffect(() => { if (user && isAdmin) supabase.rpc('admin_dashboard_stats', { p_service: mode }).then(({ data }) => setStats(data || null)); }, [mode]);
@@ -511,7 +521,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   }
   async function dnsAction(kind: 'clear' | 'unblock', username: string) {
     const { error } = await supabase.rpc(kind === 'clear' ? 'dns_clear_ip' : 'dns_unblock', { p_username: username });
-    alert(error ? error.message : (kind === 'clear' ? 'Device lock cleared. The customer can now press Activate on the new phone.' : 'Customer unblocked.'));
+    alert(error ? error.message : (kind === 'clear' ? 'Device lock cleared. The customer can now log in or activate on the new phone.' : 'Customer unblocked.'));
   }
   async function renew() {
     if (!renewFor) return;
@@ -671,7 +681,10 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
         </tr></thead>
         <tbody>{rows.map((a) => (
           <tr key={a.id} className="border-t border-[var(--line)] text-[var(--ink)]">
-            <td className="px-4 py-3"><div className="font-bold">{a.username}</div>{wgBadge(a)}</td>
+            <td className="px-4 py-3"><div className="font-bold">{a.username}</div>
+              {a.customerCode && <div className="text-[10px] font-mono text-[var(--mut)]">ID {a.customerCode}</div>}
+              {isAdmin && a.ownerId && <div className="mt-0.5 text-[10px] font-bold text-indigo-500">Created by: {ownerNames[a.ownerId] || 'Reseller'}</div>}
+              {wgBadge(a)}</td>
             <td className="px-4 py-3 text-xs font-semibold">{a.startDate ? new Date(a.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</td>
             <td className="px-4 py-3 text-xs font-semibold">{a.expiryDate}</td>
             <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${a.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : a.status === 'suspended' ? 'bg-amber-500/15 text-amber-600' : 'bg-rose-500/15 text-rose-500'}`}>{a.status}</span></td>
@@ -930,7 +943,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
 
           {tab === 'users' && (<>
             <Head t={mode === 'vpn' ? 'VPN Users' : 'Users'} s={mode === 'vpn' ? 'WireGuard accounts with bandwidth' : 'Customers by phone number'}><div className="flex gap-2"><button onClick={() => { setAddTab('id'); setModal(true); }} className={primary}><UserPlus className="h-4 w-4" />Add User</button></div></Head>
-            <div className="relative mb-4"><Search className="absolute left-3.5 top-3 h-4 w-4 text-[var(--mut)]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={mode === 'vpn' ? 'Search username…' : 'Search phone number…'} className={`${inp} pl-10`} /></div>
+            <div className="relative mb-4"><Search className="absolute left-3.5 top-3 h-4 w-4 text-[var(--mut)]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={mode === 'vpn' ? 'Search username…' : (isAdmin ? 'Search phone, customer ID or reseller…' : 'Search phone or customer ID…')} className={`${inp} pl-10`} /></div>
             <Reminders />
             <UsersTable rows={list} />
             <div className={`${card} p-5 mt-6 space-y-3`}>

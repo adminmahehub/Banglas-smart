@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
+import { Device } from '@capacitor/device';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Preferences } from '@capacitor/preferences';
@@ -24,17 +25,19 @@ const FN = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ssaqdsqopxclkplstpz
 const BASE = FN + '/dns-portal';
 const WG = FN + '/dns-wg';
 const ACT = FN + '/dns-activate';
+const LOGIN = FN + '/dns-login';
 const SITE = 'https://smartdns.mahehub.com';
 const TOKEN_KEY = 'mh_token';
 const THEME_KEY = 'mh_theme';
+const DEVICE_KEY = 'mh_device';
 
 type Theme = 'light' | 'dark';
 type Info = {
   found: boolean; valid?: boolean; status?: string; blocked?: boolean; phone_hint?: string; code?: string;
   expiry_date?: string; days_left?: number; bound_ip?: string | null; hostname?: string; activate_url?: string;
 };
-type Auto = '' | 'busy' | 'ok' | 'locked' | 'ipv6' | 'vpn_on' | 'expired' | 'error';
-type Tab = 'home' | 'account' | 'setup' | 'reseller' | 'more';
+type Auto = '' | 'busy' | 'ok' | 'locked' | 'device_locked' | 'ipv6' | 'vpn_on' | 'expired' | 'error';
+type Tab = 'home' | 'account' | 'setup' | 'reseller' | 'more' | 'admin';
 
 const THEMES: Record<Theme, Record<string, string>> = {
   light: { '--bg': '#f3f5fc', '--card': '#ffffff', '--line': '#e4e8f5', '--ink': '#161c3a', '--mut': '#6f7798', '--soft': '#edf0fb', '--glass': 'rgba(255,255,255,0.82)', '--shadow': '0 10px 30px rgba(70,84,160,0.10)' },
@@ -93,6 +96,23 @@ export function tokenFromText(v: string): string {
   return /^[A-Za-z0-9_-]{8,}$/.test(s) ? s : '';
 }
 async function tap() { try { await Haptics.impact({ style: ImpactStyle.Light }); } catch { /* not supported */ } }
+
+// The phone's own ID. An account is locked to ONE phone (not to a Wi-Fi), so this is sent with login and activation.
+let deviceIdCache = '';
+export async function getDeviceId(): Promise<string> {
+  if (deviceIdCache) return deviceIdCache;
+  let id = '';
+  try { id = ((await Device.getId()).identifier || '').replace(/[^A-Za-z0-9_-]/g, ''); } catch { /* fall back below */ }
+  if (id.length < 8) {
+    try { id = (await Preferences.get({ key: DEVICE_KEY })).value || ''; } catch { /* ignore */ }
+    if (id.length < 8) {
+      id = 'x' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      try { await Preferences.set({ key: DEVICE_KEY, value: id }); } catch { /* ignore */ }
+    }
+  }
+  deviceIdCache = id.slice(0, 64);
+  return deviceIdCache;
+}
 
 export default function NativeApp() {
   const isIos = Capacitor.getPlatform() === 'ios';
@@ -178,10 +198,10 @@ export default function NativeApp() {
   const activate = useCallback(async (t: string) => {
     setAuto('busy');
     try {
-      const r = await fetch(`${ACT}?t=${encodeURIComponent(t)}`, { cache: 'no-store' });
+      const r = await fetch(`${ACT}?t=${encodeURIComponent(t)}&d=${encodeURIComponent(await getDeviceId())}`, { cache: 'no-store' });
       const d = await r.json().catch(() => ({ ok: false, error: 'error' }));
       if (d?.ok) { setAuto('ok'); setInfo((i) => (i ? { ...i, bound_ip: d.ip || i.bound_ip } : i)); }
-      else setAuto(d?.error === 'locked' ? 'locked' : d?.error === 'ipv6' ? 'ipv6' : d?.error === 'vpn_on' ? 'vpn_on' : d?.error === 'expired' ? 'expired' : 'error');
+      else setAuto(d?.error === 'device_locked' ? 'device_locked' : d?.error === 'locked' ? 'locked' : d?.error === 'ipv6' ? 'ipv6' : d?.error === 'vpn_on' ? 'vpn_on' : d?.error === 'expired' ? 'expired' : 'error');
     } catch { setAuto('error'); }
   }, []);
   useEffect(() => { if (token) loadInfo(token); }, [token, loadInfo]);
@@ -257,6 +277,7 @@ export default function NativeApp() {
       {auto === 'busy' && <p className="text-sm text-[var(--mut)]">Activating your network…</p>}
       {auto === 'ok' && <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-500"><CheckCircle2 className="h-4 w-4" />Active{info?.bound_ip ? ` for ${info.bound_ip}` : ''}. Changed Wi-Fi or mobile data? Tap activate again.</p>}
       {auto === 'vpn_on' && <p className="text-sm text-amber-500">WireGuard is on. Turn WireGuard off, then tap activate again.</p>}
+      {auto === 'device_locked' && <p className="text-sm text-amber-500">This account is locked to another phone. Please contact support to unlock it.</p>}
       {auto === 'locked' && <p className="text-sm text-amber-500">This account is locked to another network or device. Please contact support to unlock it.</p>}
       {auto === 'expired' && <p className="text-sm text-amber-500">Your subscription is not active. Please renew.</p>}
       {(auto === 'ipv6' || auto === 'error') && <p className="text-sm text-amber-500">Automatic activation did not work on this network. Try again on another Wi-Fi or mobile data.</p>}
@@ -503,13 +524,14 @@ export default function NativeApp() {
           </div>
         ))}
       </div>
+      <button className={`${ghost} mb-3`} onClick={() => go('admin')}><ShieldCheck className="h-4 w-4" />Admin login</button>
       <button className={`${ghost} mb-3`} onClick={() => openLink(SITE)}><Globe className="h-4 w-4" />Open website</button>
       {logged && <button className="flex w-full items-center justify-center gap-2 py-3 text-sm text-[var(--mut)]" onClick={logout}><LogOut className="h-4 w-4" />Log out of customer account</button>}
       <p className="pb-2 text-center text-[11px] text-[var(--mut)]">MaheHub · {isIos ? 'iOS' : 'Android'} app</p>
     </div>
   );
 
-  const titles: Record<Tab, string> = { home: 'MaheHub', account: 'Account', setup: 'Setup', reseller: 'Reseller', more: 'More' };
+  const titles: Record<Tab, string> = { home: 'MaheHub', account: 'Account', setup: 'Setup', reseller: 'Reseller', more: 'More', admin: 'Admin' };
 
   return (
     <div style={vars} className="flex h-[100dvh] flex-col bg-[var(--bg)] text-[var(--ink)]">
@@ -529,11 +551,12 @@ export default function NativeApp() {
       </header>
 
       <main ref={mainRef} className="mh-scroll flex-1 overflow-y-auto px-4 pb-8 pt-2">
-        <div className={`mx-auto w-full ${tab === 'reseller' ? 'max-w-3xl' : 'max-w-md'}`} key={tab}>
+        <div className={`mx-auto w-full ${tab === 'reseller' || tab === 'admin' ? 'max-w-3xl' : 'max-w-md'}`} key={tab}>
           {tab === 'home' && HomeTab}
           {tab === 'account' && AccountTab}
           {tab === 'setup' && SetupTab}
           {tab === 'more' && MoreTab}
+          {tab === 'admin' && <div className="-mx-4 -mt-2"><ResellerPanel adminOnly initialDark={theme === 'dark'} onLogout={() => go('more')} onStorefront={() => go('home')} /></div>}
           {tab === 'reseller' && <div className="-mx-4 -mt-2"><ResellerPanel initialDark={theme === 'dark'} onLogout={() => go('home')} onStorefront={() => go('home')} /></div>}
         </div>
       </main>
@@ -542,8 +565,8 @@ export default function NativeApp() {
         <div className="mx-auto flex max-w-md px-2 pt-1.5">
           {tabs.map(([id, label, icon]) => (
             <button key={id} onClick={() => go(id)} className="mh-press flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10.5px] font-bold">
-              <span className={`grid h-8 w-14 place-items-center rounded-full transition-colors ${tab === id ? 'bg-indigo-500/15 text-indigo-500' : 'text-[var(--mut)]'}`}>{icon}</span>
-              <span className={tab === id ? 'text-indigo-500' : 'text-[var(--mut)]'}>{label}</span>
+              <span className={`grid h-8 w-14 place-items-center rounded-full transition-colors ${tab === id || (id === 'more' && tab === 'admin') ? 'bg-indigo-500/15 text-indigo-500' : 'text-[var(--mut)]'}`}>{icon}</span>
+              <span className={tab === id || (id === 'more' && tab === 'admin') ? 'text-indigo-500' : 'text-[var(--mut)]'}>{label}</span>
             </button>
           ))}
         </div>
@@ -556,20 +579,40 @@ export default function NativeApp() {
 }
 
 function LoginCard({ onToken }: { onToken: (t: string) => void }) {
-  const [mode, setMode] = useState<'link' | 'new'>('new');
+  const [mode, setMode] = useState<'phone' | 'new' | 'link'>('phone');
   const [link, setLink] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
   async function paste() {
     try { const { Clipboard } = await import('@capacitor/clipboard'); const { value } = await Clipboard.read(); if (value) setLink(value); } catch { /* ignore */ }
   }
-  function login() {
+  function loginLink() {
     const t = tokenFromText(link);
     if (!t) return setErr('Paste the full link your seller sent you.');
     onToken(t);
+  }
+  async function loginPhone() {
+    setErr('');
+    const ph = cleanPhone(phone);
+    const cd = code.replace(/\s/g, '');
+    if (!/^[1-9][0-9]{7,14}$/.test(ph)) return setErr('Enter your phone number with country code, without +. Example: 8801712345678');
+    if (!/^[A-Za-z0-9]{6}$/.test(cd)) return setErr('Enter your 6-digit customer ID.');
+    setBusy(true);
+    try {
+      const r = await fetch(LOGIN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: ph, code: cd, device: await getDeviceId() }) });
+      const d = await r.json().catch(() => ({ ok: false, error: 'server_error' }));
+      if (d?.ok && d.token) { onToken(d.token); return; }
+      setErr(d?.error === 'not_found' ? 'Phone number or customer ID is not correct.'
+        : d?.error === 'device_locked' ? 'This account is locked to another phone. Please ask support to unlock it.'
+        : d?.error === 'too_many' ? 'Too many tries. Please wait 30 minutes and try again.'
+        : d?.error === 'invalid' ? 'Please check your phone number and customer ID.'
+        : 'Could not log in right now. Please try again.');
+    } catch { setErr('Could not connect. Please check your internet and try again.'); }
+    setBusy(false);
   }
   async function trial() {
     setErr('');
@@ -583,24 +626,37 @@ function LoginCard({ onToken }: { onToken: (t: string) => void }) {
     onToken(data.token);
   }
 
+  const tabBtn = (id: 'phone' | 'new' | 'link', label: string) => (
+    <button onClick={() => { setMode(id); setErr(''); }} className={`rounded-xl py-2.5 ${mode === id ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow' : 'text-[var(--mut)]'}`}>{label}</button>
+  );
+
   return (
     <div className={card}>
       <div className="mb-1 text-xl font-black">Customer account</div>
-      <p className="mb-4 text-xs text-[var(--mut)]">Start a free trial or log in with the link your seller sent you.</p>
-      <div className="mb-4 grid grid-cols-2 gap-1 rounded-2xl bg-[var(--soft)] p-1 text-xs font-black">
-        <button onClick={() => { setMode('new'); setErr(''); }} className={`rounded-xl py-2.5 ${mode === 'new' ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow' : 'text-[var(--mut)]'}`}>Free trial</button>
-        <button onClick={() => { setMode('link'); setErr(''); }} className={`rounded-xl py-2.5 ${mode === 'link' ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow' : 'text-[var(--mut)]'}`}>I have my link</button>
+      <p className="mb-4 text-xs text-[var(--mut)]">Log in with your phone number and customer ID, or start a free trial.</p>
+      <div className="mb-4 grid grid-cols-3 gap-1 rounded-2xl bg-[var(--soft)] p-1 text-xs font-black">
+        {tabBtn('phone', 'Phone login')}{tabBtn('new', 'Free trial')}{tabBtn('link', 'My link')}
       </div>
       <div className="space-y-3">
-        {mode === 'link' ? (
+        {mode === 'phone' && (
+          <>
+            <input className={inp} inputMode="tel" placeholder="Phone number with country code, no +" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <input className={`${inp} text-center font-mono text-lg tracking-[0.3em]`} inputMode="numeric" maxLength={6} placeholder="Customer ID (6 digits)" value={code} onChange={(e) => setCode(e.target.value)} />
+            {err && <div className="text-xs font-semibold text-rose-500">{err}</div>}
+            <button className={primary} disabled={busy} onClick={loginPhone}>{busy ? 'Please wait…' : 'Log in'}</button>
+            <p className="text-center text-xs text-[var(--mut)]">Your customer ID was shown when your account was created. Ask your seller if you do not have it. Your account works on one phone only.</p>
+          </>
+        )}
+        {mode === 'link' && (
           <>
             <input className={inp} placeholder="Paste your link here" value={link} onChange={(e) => setLink(e.target.value)} autoCapitalize="off" autoCorrect="off" />
             <button className={ghost} onClick={paste}>Paste from clipboard</button>
             {err && <div className="text-xs font-semibold text-rose-500">{err}</div>}
-            <button className={primary} onClick={login}>Log in</button>
+            <button className={primary} onClick={loginLink}>Log in</button>
             <p className="text-center text-xs text-[var(--mut)]">Tip: if your seller sent you the link on WhatsApp, just tap it and this app opens.</p>
           </>
-        ) : (
+        )}
+        {mode === 'new' && (
           <>
             <input className={inp} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
             <input className={inp} inputMode="tel" placeholder="WhatsApp number with country code, no +" value={phone} onChange={(e) => setPhone(e.target.value)} />

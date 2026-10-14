@@ -27,7 +27,7 @@ export default function CustomerPage() {
   const [wgBusy, setWgBusy] = useState('');
   const [wgMsg, setWgMsg] = useState('');
   const [qr, setQr] = useState('');
-  const [auto, setAuto] = useState<'' | 'busy' | 'ok' | 'locked' | 'ipv6' | 'vpn_on' | 'expired' | 'error'>('');
+  const [auto, setAuto] = useState<'' | 'busy' | 'ok' | 'locked' | 'device' | 'ipv6' | 'vpn_on' | 'expired' | 'error'>('');
   const [autoIp, setAutoIp] = useState('');
   const [plat, setPlat] = useState<'ios' | 'android' | 'other'>('other');
 
@@ -56,7 +56,7 @@ export default function CustomerPage() {
       .then((d) => {
         if (off) return;
         if (d?.ok) { setAuto('ok'); setAutoIp(d.ip || ''); setInfo((i) => (i ? { ...i, bound_ip: d.ip || i.bound_ip } : i)); }
-        else setAuto(d?.error === 'locked' ? 'locked' : d?.error === 'ipv6' ? 'ipv6' : d?.error === 'vpn_on' ? 'vpn_on' : d?.error === 'expired' ? 'expired' : 'error');
+        else setAuto(d?.error === 'device_locked' ? 'device' : d?.error === 'locked' ? 'locked' : d?.error === 'ipv6' ? 'ipv6' : d?.error === 'vpn_on' ? 'vpn_on' : d?.error === 'expired' ? 'expired' : 'error');
       })
       .catch(() => { if (!off) setAuto('error'); });
     return () => { off = true; };
@@ -206,6 +206,7 @@ export default function CustomerPage() {
                   {auto === 'busy' && <p className="text-sm text-[#97a0c8]">Activating your network automatically…</p>}
                   {auto === 'ok' && <p className="text-sm text-emerald-400">✓ Activated automatically{autoIp ? ` for ${autoIp}` : ''}. If you change Wi-Fi or mobile data, just open this link again.</p>}
                   {auto === 'vpn_on' && <p className="text-sm text-amber-400">WireGuard is switched on. Turn WireGuard off, then open this link again to activate your normal network.</p>}
+                  {auto === 'device' && <p className="text-sm text-amber-400">This account is locked to one phone using the MaheHub app. Please open the MaheHub app on that phone to activate.</p>}
                   {auto === 'locked' && <p className="text-sm text-amber-400">This DNS is locked to another network. Please contact your seller to unlock it.</p>}
                   {auto === 'expired' && <p className="text-sm text-amber-400">Your subscription is not active. Please contact your seller to renew.</p>}
                   {(auto === '' || auto === 'ipv6' || auto === 'error') && (<>
