@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 export type StorePlan = { label: string; price: string; note?: string; hot?: boolean };
 
 export const DEFAULT_PLANS: StorePlan[] = [
-  { label: '1 Month', price: '৳1,000', note: '1 device • bKash, Nagad unblocked' },
+  { label: '1 Month', price: '৳1,000', note: '1 device' },
   { label: '2 Months', price: '৳1,800', note: 'Save ৳200' },
   { label: '3 Months', price: '৳2,500', note: 'Save ৳500', hot: true },
   { label: '6 Months', price: '৳4,900', note: 'Save ৳1,100' },
