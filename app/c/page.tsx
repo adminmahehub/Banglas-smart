@@ -138,7 +138,7 @@ export default function CustomerPage() {
     <div className="min-h-screen bg-[#0c1226] px-4 py-8 text-[#eef1ff]">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-6 flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 font-black text-white">M</div>
+          <img src="/icon-512.png" alt="MaheHub" className="h-10 w-10 rounded-xl" />
           <div><div className="font-black">MAHEHUB</div><div className="text-[10px] font-bold tracking-widest text-indigo-400">DNS SERVICE</div></div>
         </div>
 

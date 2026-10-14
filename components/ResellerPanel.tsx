@@ -77,6 +77,8 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const credits = Number(prof?.credits ?? 0);
   const isAdmin = prof?.role === 'admin';
   const [q, setQ] = useState('');
+  const [dq, setDq] = useState('');
+  const [raBusy, setRaBusy] = useState('');
   const [log, setLog] = useState<{ t: string; m: string }[]>([]);
   const [modal, setModal] = useState(false);
   const [rsModal, setRsModal] = useState(false);
@@ -154,6 +156,16 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     wgLocked: !!r.wg_locked, wgSeen: r.wg_last_handshake ?? null, wgNote: r.wg_lock_note ?? null,
     ownerId: r.owner_id, customerCode: r.customer_code ?? null,
   });
+  const resellerAction = async (r: any, action: 'suspend' | 'ban' | 'activate' | 'delete') => {
+    const label = { suspend: 'Suspend', ban: 'Permanently BAN', activate: 'Activate', delete: 'DELETE' }[action];
+    if (!window.confirm(`${label} reseller "${r.name || r.whatsapp}"?${action === 'delete' ? ' This cannot be undone.' : ''}`)) return;
+    setRaBusy(r.id + action);
+    const { data, error } = await supabase.functions.invoke('admin-reseller-action', { body: { reseller_id: r.id, action } });
+    setRaBusy('');
+    const err = error ? (error.message || 'failed') : (data && data.ok === false ? data.error : '');
+    if (err) { window.alert(err === 'has_customers' ? 'This reseller still has customers. Use Ban instead of Delete.' : `Failed: ${err}`); return; }
+    await load();
+  };
   const load = async () => {
     const [p, v, a] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
@@ -746,7 +758,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   if (!user) return (
     <div style={themeVars} className="min-h-screen grid place-items-center bg-[var(--bg)] p-4 text-[var(--ink)]">
       <div className={`${card} w-full max-w-sm p-7`}>
-        <div className="mb-5 flex items-center gap-3"><div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div><div><div className="font-black">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">RESELLER LOGIN</div></div></div>
+        <div className="mb-5 flex items-center gap-3"><img src="/icon-512.png" alt="MaheHub" className="h-10 w-10 rounded-xl" /><div><div className="font-black">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">RESELLER LOGIN</div></div></div>
         {onAccountType && !adminOnly && <AccountTypeSelect value="reseller" onChange={onAccountType} className={inp} />}
         {auth.signup && refCode && <div className="mb-3 rounded-xl bg-[var(--soft)] px-3.5 py-2.5 text-xs text-[var(--mut)]">Invited by: <b className="text-[var(--ink)]">{inviter || 'a MaheHub reseller'}</b></div>}
         {auth.signup && <input className={`${inp} mb-3`} placeholder="Name" value={auth.name} onChange={(e) => setAuth({ ...auth, name: e.target.value })} />}
@@ -766,7 +778,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
       {menu && <div className="fixed inset-0 z-[55] bg-black/50 backdrop-blur-[1px] lg:hidden" onClick={() => setMenu(false)} />}
       <aside className={`fixed inset-y-0 left-0 lg:sticky lg:top-0 z-[60] lg:z-40 h-[100dvh] lg:h-screen overflow-y-auto overscroll-contain w-64 max-w-[85vw] lg:max-w-none shrink-0 will-change-transform bg-[var(--card)] border-r border-[var(--line)] p-5 flex flex-col transition-transform ${menu ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="flex items-center gap-3 mb-8">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div>
+          <img src="/icon-512.png" alt="MaheHub" className="h-10 w-10 rounded-xl" />
           <div className="leading-tight"><div className="font-black tracking-tight">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">{mode === 'vpn' ? 'VPN PANEL' : 'DNS PANEL'}</div></div>
           <button className="ml-auto lg:hidden" onClick={() => setMenu(false)}><X className="h-5 w-5" /></button>
         </div>
@@ -796,6 +808,21 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
 
         <div className="p-4 sm:p-8 max-w-6xl mx-auto">
           {tab === 'dashboard' && (<>
+            <div className={`${card} p-4 mb-5`}>
+              <div className="relative"><Search className="absolute left-3.5 top-3.5 h-5 w-5 text-[var(--mut)]" /><input value={dq} onChange={(e) => setDq(e.target.value)} inputMode="search" placeholder="Find customer: phone number or 6-digit ID" className={`${inp} !pl-11 !py-3 text-base`} />{dq && <button type="button" onClick={() => setDq('')} className="absolute right-3 top-3.5"><X className="h-5 w-5 text-[var(--mut)]" /></button>}</div>
+              {dq.trim().length >= 3 && (() => {
+                const k = dq.trim().toLowerCase();
+                const kd = k.replace(/\D/g, '');
+                const hits = accounts.filter((a) => a.username.toLowerCase().includes(k) || (kd.length >= 3 && a.username.replace(/\D/g, '').includes(kd)) || (a.customerCode || '').toLowerCase() === k).slice(0, 6);
+                if (!hits.length) return <div className="mt-3 text-sm text-[var(--mut)] text-center py-3">No customer found</div>;
+                return <div className="mt-3 space-y-2">{hits.map((a) => (
+                  <div key={a.username + a.service} className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--soft)] px-3 py-3">
+                    <div className="min-w-0 flex-1"><div className="font-black truncate">{a.username}{a.customerCode ? <span className="ml-2 text-xs font-bold text-[var(--mut)]">ID {a.customerCode}</span> : null}</div>
+                      <div className="text-xs text-[var(--mut)]">{String(a.status)} · Expires {a.expiryDate}{isAdmin && a.ownerId ? ` · ${ownerNames[a.ownerId] || ''}` : ''}</div></div>
+                    <button type="button" className={`${primary} !px-4 !py-2 text-sm`} onClick={() => { setMode(a.service === 'vpn' ? 'vpn' : 'dns'); setRenewFor(a); }}><RefreshCw className="h-4 w-4" />Renew</button>
+                  </div>))}</div>;
+              })()}
+            </div>
             {annList.length > 0 && (<div className="mb-5 space-y-3">
               <style>{`@keyframes mhShine{0%{transform:translateX(-130%) skewX(-18deg)}60%,100%{transform:translateX(330%) skewX(-18deg)}}@keyframes mhFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}@keyframes mhGlow{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.0)}50%{box-shadow:0 0 28px 2px rgba(251,191,36,.35)}}.mh-shine{position:relative;overflow:hidden}.mh-shine::after{content:"";position:absolute;top:0;left:0;height:100%;width:35%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);animation:mhShine 4.5s ease-in-out infinite;pointer-events:none}.mh-float{animation:mhFloat 2.6s ease-in-out infinite}.mh-glow{animation:mhGlow 3s ease-in-out infinite}`}</style>
               {annList.map((n) => {
@@ -970,9 +997,9 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
           {tab === 'resellers' && (<>
             <Head t={isAdmin ? 'Resellers' : 'My Team'} s={isAdmin ? 'All reseller accounts, who invited them and their team sales' : 'Resellers who joined through your referral link'}><button className={primary} onClick={() => { setRsDone(null); setRsErr(''); setRsModal(true); }}><UserPlus className="h-4 w-4" />Add Reseller</button></Head>
             {isAdmin ? (
-              <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[760px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Credits', 'Invited by', 'Team', 'Team sales ৳', 'Joined', ''].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
-                <tbody>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)', _me: true }] : []), ...((stats?.per_reseller || resellers) as any[])].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{r._me ? '-' : (r.upline_name || 'Admin')}</td><td className="px-4 py-3">{r._me ? '-' : `${r.direct_count ?? 0} direct · ${r.team_count ?? 0} total`}</td><td className="px-4 py-3">{r._me ? '-' : Number(r.team_sales_bdt ?? 0).toLocaleString()}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3"><button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button></td></tr>)}
-                  {resellers.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-[var(--mut)]">No resellers</td></tr>}</tbody></table></div>
+              <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[900px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Credits', 'Invited by', 'Team', 'Team sales ৳', 'Joined', 'Status', ''].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
+                <tbody>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)', _me: true }] : []), ...((stats?.per_reseller || resellers) as any[])].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{r._me ? '-' : (r.upline_name || 'Admin')}</td><td className="px-4 py-3">{r._me ? '-' : `${r.direct_count ?? 0} direct · ${r.team_count ?? 0} total`}</td><td className="px-4 py-3">{r._me ? '-' : Number(r.team_sales_bdt ?? 0).toLocaleString()}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3">{(() => { const st = r._me ? 'active' : (resellers.find((x: any) => x.id === r.id)?.status || 'active'); return <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${st === 'active' ? 'bg-emerald-500/15 text-emerald-500' : st === 'suspended' ? 'bg-amber-500/15 text-amber-500' : 'bg-rose-500/15 text-rose-500'}`}>{st}</span>; })()}</td><td className="px-4 py-3"><div className="flex flex-wrap gap-1.5"><button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button>{!r._me && (() => { const st = resellers.find((x: any) => x.id === r.id)?.status || 'active'; const b = `${ghost} !px-3 !py-1.5 text-xs disabled:opacity-50`; return <>{st === 'active' ? <button disabled={!!raBusy} onClick={() => resellerAction(r, 'suspend')} className={b}>Suspend</button> : <button disabled={!!raBusy} onClick={() => resellerAction(r, 'activate')} className={b}>Activate</button>}{st !== 'banned' && <button disabled={!!raBusy} onClick={() => resellerAction(r, 'ban')} className={`${b} !text-rose-500`}>Ban</button>}<button disabled={!!raBusy} onClick={() => resellerAction(r, 'delete')} className={`${b} !text-rose-500`}><Trash2 className="h-3.5 w-3.5" /></button></>; })()}</div></td></tr>)}
+                  {resellers.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-[var(--mut)]">No resellers</td></tr>}</tbody></table></div>
             ) : (<>
               {refInfo?.code && <div className={`${card} p-4 mb-4 flex flex-wrap items-center gap-3 text-sm`}><Link2 className="h-4 w-4 text-indigo-500" /><span className="text-[var(--mut)]">Your invite link:</span><b className="break-all">{typeof window !== 'undefined' ? siteOrigin() : ''}/?ref={refInfo.share_code || refInfo.code}</b><button className={`${ghost} !py-1.5 ml-auto`} onClick={() => flash('ref2', `${siteOrigin()}/?ref=${refInfo.share_code || refInfo.code}`)}>{copied === 'ref2' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>}
               <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[560px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Level', 'Credits bought', 'Customers', 'Joined'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>

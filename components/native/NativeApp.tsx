@@ -538,7 +538,7 @@ export default function NativeApp() {
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <header className="flex items-center justify-between px-5 pb-2" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 10px)' }}>
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-lg font-black text-white shadow-lg shadow-indigo-500/30">M</div>
+          <img src="/icon-512.png" alt="MaheHub" className="h-10 w-10 rounded-xl" />
           <div>
             <div className="text-lg font-black leading-none">{titles[tab]}</div>
             {tab === 'home' && <div className="mt-0.5 text-[10px] font-bold tracking-[0.2em] text-indigo-500">SMART DNS</div>}

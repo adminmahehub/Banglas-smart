@@ -333,7 +333,7 @@ export function CustomerAccess({ onBack, onAccountType }: { theme?: 'dark' | 'li
     <div style={PANEL_LIGHT} className="min-h-screen grid place-items-center bg-[var(--bg)] p-4 text-[var(--ink)]">
       <div className={`${pCard} w-full max-w-sm p-7`}>
         <div className="mb-5 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center font-black">M</div>
+          <img src="/icon-512.png" alt="MaheHub" className="h-10 w-10 rounded-xl" />
           <div><div className="font-black">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">CUSTOMER ACCOUNT</div></div>
         </div>
         {onAccountType && <AccountTypeSelect value="customer" onChange={onAccountType} className={pInp} />}
