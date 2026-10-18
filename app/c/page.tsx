@@ -10,7 +10,7 @@ const QR_THEME = { '--card': '#141c38', '--line': '#232c52', '--ink': '#eef1ff',
 
 type Info = {
   found: boolean; valid?: boolean; status?: string; blocked?: boolean; phone_hint?: string; code?: string;
-  expiry_date?: string; days_left?: number; bound_ip?: string | null; hostname?: string; activate_url?: string;
+  expiry_date?: string; days_left?: number; bound_ip?: string | null; hostname?: string; per_customer?: boolean; activate_url?: string;
 };
 
 const card = 'rounded-2xl border border-[#232c52] bg-[#141c38] p-5 mb-4';
@@ -161,7 +161,9 @@ export default function CustomerPage() {
                 </span>
               </div>
               <div className="mt-2 text-sm">Expires: <b>{info.expiry_date}</b> · {info.days_left} day(s) left</div>
-              {info.bound_ip
+              {info.per_customer
+                ? <div className="mt-1 text-xs text-emerald-400">Works on any Wi-Fi or mobile data</div>
+                : info.bound_ip
                 ? <div className="mt-1 text-xs text-[#97a0c8]">Activated for IP: {info.bound_ip}</div>
                 : <div className="mt-1 text-xs text-amber-400">{auto === 'busy' ? 'Activating your IP…' : 'Not activated yet. See step 3 below.'}</div>}
             </div>
@@ -202,7 +204,11 @@ export default function CustomerPage() {
                 </div>
 
                 <div className={card}>
-                  <div className="mb-1 font-black">3. Activate my IP</div>
+                  <div className="mb-1 font-black">{info.per_customer ? '3. Network' : '3. Activate my IP'}</div>
+                  {info.per_customer ? (<>
+                    <p className="text-sm text-emerald-400">✓ Nothing to activate. Your personal hostname works on any Wi-Fi or mobile data, and does not need to be activated again.</p>
+                    <p className="mt-2 text-xs text-amber-400">Check that Private DNS shows exactly <b className="break-all">{info.hostname}</b>. If you saved an older hostname (for example dns.mahehub.com), replace it with this one.</p>
+                  </>) : (<>
                   {auto === 'busy' && <p className="text-sm text-[#97a0c8]">Activating your network automatically…</p>}
                   {auto === 'ok' && <p className="text-sm text-emerald-400">✓ Activated automatically{autoIp ? ` for ${autoIp}` : ''}. If you change Wi-Fi or mobile data, just open this link again.</p>}
                   {auto === 'vpn_on' && <p className="text-sm text-amber-400">WireGuard is switched on. Turn WireGuard off, then open this link again to activate your normal network.</p>}
@@ -212,6 +218,7 @@ export default function CustomerPage() {
                   {(auto === '' || auto === 'ipv6' || auto === 'error') && (<>
                     <p className="mb-3 text-sm text-[#97a0c8]">{auto === 'ipv6' || auto === 'error' ? 'Automatic activation did not work on this network. Press this button once while you are on the network you will use.' : 'Press this once while you are on the network you will use (Wi-Fi or mobile data). If your network changes, press it again.'}</p>
                     <a className={ghost} href={activateHref}>Activate my IP</a>
+                  </>)}
                   </>)}
                 </div>
 

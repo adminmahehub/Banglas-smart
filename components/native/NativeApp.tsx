@@ -34,7 +34,7 @@ const DEVICE_KEY = 'mh_device';
 type Theme = 'light' | 'dark';
 type Info = {
   found: boolean; valid?: boolean; status?: string; blocked?: boolean; phone_hint?: string; code?: string;
-  expiry_date?: string; days_left?: number; bound_ip?: string | null; hostname?: string; activate_url?: string;
+  expiry_date?: string; days_left?: number; bound_ip?: string | null; hostname?: string; per_customer?: boolean; activate_url?: string;
 };
 type Auto = '' | 'busy' | 'ok' | 'locked' | 'device_locked' | 'ipv6' | 'vpn_on' | 'expired' | 'error';
 type Tab = 'home' | 'account' | 'setup' | 'reseller' | 'more' | 'admin';
@@ -297,10 +297,14 @@ export default function NativeApp() {
             </div>
             <div className="mt-3 text-4xl font-black leading-none">{info.valid ? info.days_left : 0}<span className="ml-2 text-lg font-bold text-white/80">days left</span></div>
             <div className="mt-1 text-xs text-white/75">Expires {info.expiry_date}</div>
+            {info.per_customer
+              ? <div className="mt-5 rounded-2xl bg-white/20 px-4 py-3 text-center text-sm font-bold backdrop-blur">✓ Works on any Wi-Fi or mobile data</div>
+              : <>
             <button className="mh-press mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3.5 text-sm font-black text-indigo-700 disabled:opacity-70" disabled={!active || auto === 'busy'} onClick={() => { tap(); activate(token); }}>
               <Zap className="h-4 w-4" />{auto === 'busy' ? 'Activating…' : 'Activate this network'}
             </button>
             {auto === 'ok' && <div className="mt-2 text-center text-xs font-semibold text-white/90">✓ Active</div>}
+              </>}
           </div>
         ) : (
           <div className="relative">
@@ -424,9 +428,14 @@ export default function NativeApp() {
           )}
           {info.valid ? (
             <div className={card}>
-              <div className="mb-2 font-black">Network activation</div>
+              <div className="mb-2 font-black">{info.per_customer ? 'Network' : 'Network activation'}</div>
+              {info.per_customer ? (<>
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-500"><CheckCircle2 className="h-4 w-4" />Works on any Wi-Fi or mobile data. Nothing to activate.</p>
+              <p className="mt-2 text-xs text-amber-500">Check that Private DNS shows exactly <b className="break-all">{info.hostname}</b>. If you saved an older hostname (for example dns.mahehub.com), replace it with this one.</p>
+              </>) : (<>
               <AutoNote />
               <button className={`${ghost} mt-3`} disabled={auto === 'busy'} onClick={() => { tap(); activate(token); }}>Activate this network</button>
+              </>)}
             </div>
           ) : (
             <div className={card}><p className="text-sm text-[var(--mut)]">{info.blocked ? 'Your access is blocked. Please contact support.' : 'Your subscription is not active. Please renew with support.'}</p>
@@ -457,10 +466,15 @@ export default function NativeApp() {
             </div>
           )}
           <div className={card}>
-            <div className="mb-1 font-black">2. Activate your network</div>
+            <div className="mb-1 font-black">{info.per_customer ? '2. Network' : '2. Activate your network'}</div>
+            {info.per_customer ? (<>
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-500"><CheckCircle2 className="h-4 w-4" />Works on any Wi-Fi or mobile data. Nothing to activate.</p>
+              <p className="mt-2 text-xs text-amber-500">Check that Private DNS shows exactly <b className="break-all">{info.hostname}</b>. If you saved an older hostname (for example dns.mahehub.com), replace it with this one.</p>
+            </>) : (<>
             <p className="mb-3 text-sm text-[var(--mut)]">Tap activate while you are on the Wi-Fi or mobile data you will use.</p>
             <AutoNote />
             <button className={`${ghost} mt-3`} disabled={auto === 'busy'} onClick={() => { tap(); activate(token); }}>Activate this network</button>
+            </>)}
           </div>
           <div className={card}>
             <div className="mb-1 font-black">3. WireGuard (full VPN, optional)</div>
