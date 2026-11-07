@@ -51,7 +51,13 @@ export default function CustomerPage() {
     if (!token || !info?.found || !info.valid || info.blocked || act) return;
     let off = false;
     setAuto('busy');
-    fetch(`${ACT}?t=${encodeURIComponent(token)}`, { cache: 'no-store' })
+    // the browser's own random ID; the server uses it only when the admin turns on the web device lock
+    let wd = '';
+    try {
+      wd = localStorage.getItem('mh_wd') || '';
+      if (!/^[A-Za-z0-9_-]{8,60}$/.test(wd)) { wd = (crypto.randomUUID?.() || String(Math.random()).slice(2) + Date.now()).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40); localStorage.setItem('mh_wd', wd); }
+    } catch { /* storage blocked: no web lock for this visit */ }
+    fetch(`${ACT}?t=${encodeURIComponent(token)}${wd ? `&wd=${encodeURIComponent(wd)}` : ''}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => ({ ok: false, error: 'error' })))
       .then((d) => {
         if (off) return;

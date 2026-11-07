@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Network, PlusCircle, Activity, KeyRound, UserCircle, LogOut, Search,
-  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone, ShieldCheck, QrCode,
+  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone, ShieldCheck, QrCode, Smartphone,
 } from 'lucide-react';
 import type { VpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
@@ -78,13 +78,16 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const isAdmin = prof?.role === 'admin';
   const [q, setQ] = useState('');
   const [dq, setDq] = useState('');
-  const [raBusy, setRaBusy] = useState('');
+  const [lk, setLk] = useState('');
+  const [lkRes, setLkRes] = useState<any>(null);
+  const [lkBusy, setLkBusy] = useState(false);
+  const [rsBusy, setRsBusy] = useState('');
   const [log, setLog] = useState<{ t: string; m: string }[]>([]);
   const [modal, setModal] = useState(false);
   const [rsModal, setRsModal] = useState(false);
   const [rsForm, setRsForm] = useState({ name: '', country: 'BD', phone: '', email: '', password: '' });
   const [rsErr, setRsErr] = useState('');
-  const [rsBusy, setRsBusy] = useState(false);
+  const [rsCreating, setRsCreating] = useState(false);
   const [rsDone, setRsDone] = useState<{ email: string; password: string; phone: string } | null>(null);
   const [slip, setSlip] = useState<VpnAccount | null>(null);
   const [resellers, setResellers] = useState<any[]>([]);
@@ -159,9 +162,9 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const resellerAction = async (r: any, action: 'suspend' | 'ban' | 'activate' | 'delete') => {
     const label = { suspend: 'Suspend', ban: 'Permanently BAN', activate: 'Activate', delete: 'DELETE' }[action];
     if (!window.confirm(`${label} reseller "${r.name || r.whatsapp}"?${action === 'delete' ? ' This cannot be undone.' : ''}`)) return;
-    setRaBusy(r.id + action);
+    setRsBusy(r.id + action);
     const { data, error } = await supabase.functions.invoke('admin-reseller-action', { body: { reseller_id: r.id, action } });
-    setRaBusy('');
+    setRsBusy('');
     const err = error ? (error.message || 'failed') : (data && data.ok === false ? data.error : '');
     if (err) { window.alert(err === 'has_customers' ? 'This reseller still has customers. Use Ban instead of Delete.' : `Failed: ${err}`); return; }
     await load();
@@ -340,9 +343,9 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     if (local.length < 6) return setRsErr('Enter the WhatsApp number');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rsForm.email.trim())) return setRsErr('Enter a valid email');
     if (rsForm.password.length < 6) return setRsErr('Password must be at least 6 characters');
-    setRsBusy(true);
+    setRsCreating(true);
     const { data, error } = await supabase.functions.invoke('create-reseller', { body: { name: rsForm.name, whatsapp: cc + local, email: rsForm.email, password: rsForm.password } });
-    setRsBusy(false);
+    setRsCreating(false);
     let m = (data as any)?.error || '';
     if (!m && error) { try { m = (await (error as any).context?.json?.())?.error || ''; } catch { /* ignore */ } m = m || error.message; }
     if (m) return setRsErr(m);
@@ -414,10 +417,31 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   }
   async function savePhone() {
     if (!phoneFor) return;
-    if (!validWa(newPhone)) { alert('Enter the number with + and the country code (example +966501234567)'); return; }
-    const { data, error } = await supabase.rpc('edit_customer_phone', { p_username: phoneFor.username, p_new_phone: newPhone });
+    // accept 96552437219, 0096552437219 and +96552437219: always send +<country code><number>
+    const raw = String(newPhone).replace(/[\s()-]/g, '');
+    const norm = raw.startsWith('+') ? raw : '+' + raw.replace(/^00/, '');
+    if (!validWa(norm)) { alert('Enter the number with the country code (example 966501234567 or +966501234567)'); return; }
+    const { data, error } = await supabase.rpc('edit_customer_phone', { p_username: phoneFor.username, p_new_phone: norm });
     if (error) { alert(error.message); return; }
     alert('Phone number changed to ' + data + '. If you sent a customer link before, it still works.'); setPhoneFor(null); setNewPhone(''); load();
+  }
+  async function lookupAccount() {
+    const v = lk.trim();
+    if (v.length < 4) { alert('Paste a customer ID, phone number or DNS link.'); return; }
+    setLkBusy(true); setLkRes(null);
+    const { data, error } = await supabase.rpc('admin_account_lookup', { p_query: v });
+    setLkBusy(false);
+    if (error) { alert(error.message); return; }
+    setLkRes(data || { found: false });
+  }
+  async function setAllowedDevices(a: any) {
+    const v = prompt('How many phones may use this customer link? (1, 2 or 3)', '2');
+    if (v === null) return;
+    const n = Math.floor(Number(v));
+    if (!(n >= 1 && n <= 3)) { alert('Enter 1, 2 or 3.'); return; }
+    const { error } = await supabase.rpc('set_allowed_devices', { p_username: a.username, p_max: n });
+    if (error) { alert(error.message); return; }
+    alert('Allowed phones for ' + a.username + ' is now ' + n + '.');
   }
   async function addServer() {
     if (!svForm.name.trim() || !svForm.host.trim()) { alert('Enter the server name and host.'); return; }
@@ -707,6 +731,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
               <button title="WireGuard QR code (customer scans it)" onClick={() => showQr(a, true)} className={`${ghost} !p-2`}><QrCode className="h-4 w-4" /></button>
               <button title="3. Copy DNS link (bKash)" onClick={() => makeLink(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
               <button title="4. Edit phone number" onClick={() => { setPhoneFor(a); setNewPhone('+' + a.username); }} className={`${ghost} !p-2`}><Pencil className="h-4 w-4" /></button>
+              {isAdmin && <button title="Allowed phones (1-3)" onClick={() => setAllowedDevices(a)} className={`${ghost} !p-2`}><Smartphone className="h-4 w-4" /></button>}
               {isAdmin && dnsServers.length > 1 && <button title="Move to another DNS server" onClick={() => { setMoveFor(a); setMoveTo(''); }} className={`${ghost} !p-2`}><Server className="h-4 w-4" /></button>}
               <button title="5. Renew (choose months)" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
               <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
@@ -822,6 +847,22 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                     <button type="button" className={`${primary} !px-4 !py-2 text-sm`} onClick={() => { setMode(a.service === 'vpn' ? 'vpn' : 'dns'); setRenewFor(a); }}><RefreshCw className="h-4 w-4" />Renew</button>
                   </div>))}</div>;
               })()}
+              <div className="mt-4 border-t border-[var(--line)] pt-4">
+                <div className="mb-2 text-xs font-bold text-[var(--mut)]">Whose customer is this? Paste a customer ID, phone, or the customer's DNS link</div>
+                <div className="flex gap-2">
+                  <input value={lk} onChange={(e) => setLk(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') lookupAccount(); }} placeholder="Customer ID, phone, or DNS link" className={`${inp} !py-3`} />
+                  <button type="button" disabled={lkBusy} onClick={lookupAccount} className={`${primary} !px-4 !py-2 text-sm`}>{lkBusy ? '...' : 'Check'}</button>
+                </div>
+                {lkRes && (lkRes.found === false
+                  ? <div className="mt-3 text-sm text-[var(--mut)] text-center py-2">No customer found for this link or ID.</div>
+                  : <div className="mt-3 space-y-2 rounded-xl border border-[var(--line)] bg-[var(--soft)] p-3 text-sm">
+                      <div className="font-black">{lkRes.username}{lkRes.customer_code ? <span className="ml-2 text-xs font-bold text-[var(--mut)]">ID {lkRes.customer_code}</span> : null}</div>
+                      <div className="text-xs text-[var(--mut)]">{String(lkRes.service).toUpperCase()} · {String(lkRes.status)} · Expires {lkRes.expiry}{isAdmin && lkRes.owner_id ? ` · Seller: ${ownerNames[lkRes.owner_id] || 'Admin'}` : ''}</div>
+                      <div className="text-xs">Linked IP: <b>{lkRes.bound_ip || 'none'}</b> · Allowed phones: <b>{lkRes.max_devices}</b></div>
+                      {(lkRes.devices || []).length > 0 && <div className="text-xs"><div className="font-bold">Phones</div>{(lkRes.devices || []).map((d: any, i: number) => (<div key={i} className="text-[var(--mut)] break-words">{d.id} · {d.country || '—'} · {d.ip || ''} · last {d.last_seen ? new Date(d.last_seen).toLocaleString() : ''}<div className="opacity-70">{d.ua || ''}</div></div>))}</div>}
+                      {(lkRes.log || []).length > 0 && <div className="text-xs"><div className="font-bold">Recent activity</div>{(lkRes.log || []).map((l: any, i: number) => (<div key={i} className="text-[var(--mut)] break-words">{l.at ? new Date(l.at).toLocaleString() : ''} · {l.event} · {l.ip || ''} · {l.country || '—'}</div>))}</div>}
+                    </div>)}
+              </div>
             </div>
             {annList.length > 0 && (<div className="mb-5 space-y-3">
               <style>{`@keyframes mhShine{0%{transform:translateX(-130%) skewX(-18deg)}60%,100%{transform:translateX(330%) skewX(-18deg)}}@keyframes mhFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}@keyframes mhGlow{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.0)}50%{box-shadow:0 0 28px 2px rgba(251,191,36,.35)}}.mh-shine{position:relative;overflow:hidden}.mh-shine::after{content:"";position:absolute;top:0;left:0;height:100%;width:35%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);animation:mhShine 4.5s ease-in-out infinite;pointer-events:none}.mh-float{animation:mhFloat 2.6s ease-in-out infinite}.mh-glow{animation:mhGlow 3s ease-in-out infinite}`}</style>
@@ -998,7 +1039,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
             <Head t={isAdmin ? 'Resellers' : 'My Team'} s={isAdmin ? 'All reseller accounts, who invited them and their team sales' : 'Resellers who joined through your referral link'}><button className={primary} onClick={() => { setRsDone(null); setRsErr(''); setRsModal(true); }}><UserPlus className="h-4 w-4" />Add Reseller</button></Head>
             {isAdmin ? (
               <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[900px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Credits', 'Invited by', 'Team', 'Team sales ৳', 'Joined', 'Status', ''].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
-                <tbody>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)', _me: true }] : []), ...((stats?.per_reseller || resellers) as any[])].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{r._me ? '-' : (r.upline_name || 'Admin')}</td><td className="px-4 py-3">{r._me ? '-' : `${r.direct_count ?? 0} direct · ${r.team_count ?? 0} total`}</td><td className="px-4 py-3">{r._me ? '-' : Number(r.team_sales_bdt ?? 0).toLocaleString()}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3">{(() => { const st = r._me ? 'active' : (resellers.find((x: any) => x.id === r.id)?.status || 'active'); return <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${st === 'active' ? 'bg-emerald-500/15 text-emerald-500' : st === 'suspended' ? 'bg-amber-500/15 text-amber-500' : 'bg-rose-500/15 text-rose-500'}`}>{st}</span>; })()}</td><td className="px-4 py-3"><div className="flex flex-wrap gap-1.5"><button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button>{!r._me && (() => { const st = resellers.find((x: any) => x.id === r.id)?.status || 'active'; const b = `${ghost} !px-3 !py-1.5 text-xs disabled:opacity-50`; return <>{st === 'active' ? <button disabled={!!raBusy} onClick={() => resellerAction(r, 'suspend')} className={b}>Suspend</button> : <button disabled={!!raBusy} onClick={() => resellerAction(r, 'activate')} className={b}>Activate</button>}{st !== 'banned' && <button disabled={!!raBusy} onClick={() => resellerAction(r, 'ban')} className={`${b} !text-rose-500`}>Ban</button>}<button disabled={!!raBusy} onClick={() => resellerAction(r, 'delete')} className={`${b} !text-rose-500`}><Trash2 className="h-3.5 w-3.5" /></button></>; })()}</div></td></tr>)}
+                <tbody>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)', _me: true }] : []), ...((stats?.per_reseller || resellers) as any[])].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{r._me ? '-' : (r.upline_name || 'Admin')}</td><td className="px-4 py-3">{r._me ? '-' : `${r.direct_count ?? 0} direct · ${r.team_count ?? 0} total`}</td><td className="px-4 py-3">{r._me ? '-' : Number(r.team_sales_bdt ?? 0).toLocaleString()}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3">{(() => { const st = r._me ? 'active' : (resellers.find((x: any) => x.id === r.id)?.status || 'active'); return <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${st === 'active' ? 'bg-emerald-500/15 text-emerald-500' : st === 'suspended' ? 'bg-amber-500/15 text-amber-500' : 'bg-rose-500/15 text-rose-500'}`}>{st}</span>; })()}</td><td className="px-4 py-3"><div className="flex flex-wrap gap-1.5"><button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button>{!r._me && (() => { const st = resellers.find((x: any) => x.id === r.id)?.status || 'active'; const b = `${ghost} !px-3 !py-1.5 text-xs disabled:opacity-50`; return <>{st === 'active' ? <button disabled={!!rsBusy} onClick={() => resellerAction(r, 'suspend')} className={b}>Suspend</button> : <button disabled={!!rsBusy} onClick={() => resellerAction(r, 'activate')} className={b}>Activate</button>}{st !== 'banned' && <button disabled={!!rsBusy} onClick={() => resellerAction(r, 'ban')} className={`${b} !text-rose-500`}>Ban</button>}<button disabled={!!rsBusy} onClick={() => resellerAction(r, 'delete')} className={`${b} !text-rose-500`}><Trash2 className="h-3.5 w-3.5" /></button></>; })()}</div></td></tr>)}
                   {resellers.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-[var(--mut)]">No resellers</td></tr>}</tbody></table></div>
             ) : (<>
               {refInfo?.code && <div className={`${card} p-4 mb-4 flex flex-wrap items-center gap-3 text-sm`}><Link2 className="h-4 w-4 text-indigo-500" /><span className="text-[var(--mut)]">Your invite link:</span><b className="break-all">{typeof window !== 'undefined' ? siteOrigin() : ''}/?ref={refInfo.share_code || refInfo.code}</b><button className={`${ghost} !py-1.5 ml-auto`} onClick={() => flash('ref2', `${siteOrigin()}/?ref=${refInfo.share_code || refInfo.code}`)}>{copied === 'ref2' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>}
@@ -1310,7 +1351,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                 <input className={inp} placeholder="Password (min 6)" value={rsForm.password} onChange={(e) => setRsForm({ ...rsForm, password: e.target.value })} />
                 <div className="text-xs text-[var(--mut)]">{isAdmin ? 'The new reseller works directly under you.' : 'The new reseller joins your team (same as your invite link).'}</div>
                 {rsErr && <div className="text-sm font-semibold text-rose-500">{rsErr}</div>}
-                <button className={`${primary} w-full disabled:opacity-50`} disabled={rsBusy} onClick={createReseller}>{rsBusy ? 'Please wait…' : 'Create reseller'}</button>
+                <button className={`${primary} w-full disabled:opacity-50`} disabled={rsCreating} onClick={createReseller}>{rsCreating ? 'Please wait…' : 'Create reseller'}</button>
               </div>
             )}
           </div>

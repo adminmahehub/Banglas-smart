@@ -622,6 +622,7 @@ function LoginCard({ onToken }: { onToken: (t: string) => void }) {
       if (d?.ok && d.token) { onToken(d.token); return; }
       setErr(d?.error === 'not_found' ? 'Phone number or customer ID is not correct.'
         : d?.error === 'device_locked' ? 'This account is locked to another phone. Please ask support to unlock it.'
+        : d?.error === 'use_link' ? 'This account has more than one allowed phone. Please use the "My link" tab and paste your customer link.'
         : d?.error === 'too_many' ? 'Too many tries. Please wait 30 minutes and try again.'
         : d?.error === 'invalid' ? 'Please check your phone number and customer ID.'
         : 'Could not log in right now. Please try again.');
@@ -634,7 +635,7 @@ function LoginCard({ onToken }: { onToken: (t: string) => void }) {
     if (name.trim().length < 2) return setErr('Please enter your name');
     if (!/^[1-9][0-9]{7,14}$/.test(ph)) return setErr('Enter country code and number together, without +. Example: 966501234567, 8801712345678, 60123456789');
     setBusy(true);
-    const { data, error } = await supabase.rpc('public_free_trial', { p_name: name.trim(), p_phone: ph });
+    const { data, error } = await supabase.rpc('public_free_trial', { p_name: name.trim(), p_phone: ph, p_device: await getDeviceId() });
     setBusy(false);
     if (error || !data?.token) return setErr(error?.message || 'Could not create the trial. Please try again.');
     onToken(data.token);

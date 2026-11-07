@@ -35,12 +35,24 @@ Deno.serve(async (req) => {
   const t = (u.searchParams.get("t") ?? "").trim().toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(t)) return json({ ok: false, error: "not_found" }, 404);
   const dRaw = (u.searchParams.get("d") ?? "").trim();
-  const device = /^[A-Za-z0-9_-]{8,64}$/.test(dRaw) ? dRaw : null;
+  let device: string | null = /^[A-Za-z0-9_-]{8,64}$/.test(dRaw) ? dRaw : null;
+  // wd = the browser's own random ID (website). It is used only when the admin switches app_settings.web_device_lock = 'on'.
+  const wdRaw = (u.searchParams.get("wd") ?? "").trim();
 
   const ip = clientIpv4(req);
   if (!ip) return json({ ok: false, error: "ipv6" });
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+  if (!device && /^[A-Za-z0-9_-]{8,60}$/.test(wdRaw)) {
+    try {
+      const { data: s } = await admin.from("app_settings").select("value").eq("key", "web_device_lock").maybeSingle();
+      if (s?.value === "on") device = "w" + wdRaw;
+    } catch (_e) { /* setting unreadable: keep the old behaviour */ }
+  }
+  const ua = (req.headers.get("user-agent") ?? "").slice(0, 300);
+  const cc = (req.headers.get("cf-ipcountry") ?? "").trim().slice(0, 2).toUpperCase();
+  const country = /^[A-Z]{2}$/.test(cc) ? cc : null;
 
   // If the customer has WireGuard switched on, this IP is the VPN server, shared by all VPN customers. Never bind that.
   try {
@@ -49,7 +61,7 @@ Deno.serve(async (req) => {
     if (wgHost && wgHost === ip) return json({ ok: false, error: "vpn_on" });
   } catch (_e) { /* ignore */ }
 
-  const { data, error } = await admin.rpc("dns_activate_ip", { p_token: t, p_ip: ip, p_device: device });
+  const { data, error } = await admin.rpc("dns_activate_ip", { p_token: t, p_ip: ip, p_device: device, p_ua: ua, p_country: country });
   if (error) return json({ ok: false, error: "server_error" }, 500);
   return json(data);
 });
