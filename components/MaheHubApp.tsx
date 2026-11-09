@@ -15,6 +15,7 @@ import {
 import ResellerPanel from './ResellerPanel';
 import { CustomerAccess, parsePlans, cleanPhone } from './Storefront';
 import { supabase } from '../lib/supabase';
+import NoticeCard from './NoticeCard';
 import { siteOrigin } from '../lib/siteOrigin';
 import { 
   LayoutDashboard, 
@@ -847,9 +848,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
           
           <div className="flex items-center justify-between w-full sm:w-auto gap-3">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-black text-black text-xs shadow-md shrink-0">
-                M
-              </div>
+              <img src="/icon-512.png" alt="MaheHub" className="h-9 w-9 rounded-xl shadow-md shrink-0" />
               <div>
                 <span className={`font-mono font-black uppercase tracking-wider text-xs block leading-tight ${
                   theme === 'dark' ? 'text-cyan-400' : 'text-cyan-800'
@@ -993,12 +992,9 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
         </div>
       </header>
       {notices.filter((n) => !hiddenNotices.includes(n.id)).length > 0 && (
-        <div className="mx-auto max-w-4xl space-y-2 px-4 pt-3">
+        <div className="mx-auto max-w-4xl space-y-3 px-4 pt-3">
           {notices.filter((n) => !hiddenNotices.includes(n.id)).map((n) => (
-            <div key={n.id} className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${n.kind === 'offer' ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300'}`}>
-              <div><div className="font-black">{n.kind === 'offer' ? '🎁 ' : '📢 '}{n.title}</div>{n.body && <div className="mt-0.5 text-xs opacity-90 whitespace-pre-line">{n.body}</div>}</div>
-              <button type="button" aria-label="Close" className="shrink-0 text-lg leading-none opacity-70" onClick={() => setHiddenNotices((h) => [...h, n.id])}>×</button>
-            </div>
+            <NoticeCard key={n.id} kind={n.kind} title={n.title} body={n.body} onClose={() => setHiddenNotices((h) => [...h, n.id])} />
           ))}
         </div>
       )}
@@ -2016,9 +2012,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 {/* Col 1: Brand & Mission */}
                 <div className="space-y-4 lg:col-span-1">
                   <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-black text-black text-xs shadow-md">
-                      M
-                    </div>
+                    <img src="/icon-512.png" alt="MaheHub" className="h-9 w-9 rounded-xl shadow-md" />
                     <span className={`font-mono font-black uppercase tracking-wider text-base ${
                       theme === 'dark' ? 'text-cyan-400' : 'text-cyan-800'
                     }`}>

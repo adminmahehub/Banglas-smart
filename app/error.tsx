@@ -27,9 +27,7 @@ export default function ErrorBoundary({
   return (
     <div className="min-h-screen bg-[#030712] text-white flex flex-col items-center justify-center p-6 text-center">
       <div className="max-w-md w-full p-8 rounded-3xl bg-slate-900/90 border border-cyan-500/30 shadow-2xl space-y-6">
-        <div className="h-16 w-16 mx-auto rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-2xl font-black">
-          M
-        </div>
+        <img src="/icon-512.png" alt="MaheHub" className="h-16 w-16 mx-auto rounded-2xl" />
         
         <div className="space-y-2">
           <h2 className="text-xl font-black text-white">MaheHub System Sync</h2>

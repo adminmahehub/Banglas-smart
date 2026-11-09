@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Users, Network, PlusCircle, Activity, KeyRound, UserCircle, LogOut, Search,
   Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone, ShieldCheck, QrCode, Smartphone,
 } from 'lucide-react';
+import NoticeCard from './NoticeCard';
 import type { VpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
 import { COUNTRIES } from '../lib/countries';
@@ -864,23 +865,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                     </div>)}
               </div>
             </div>
-            {annList.length > 0 && (<div className="mb-5 space-y-3">
-              <style>{`@keyframes mhShine{0%{transform:translateX(-130%) skewX(-18deg)}60%,100%{transform:translateX(330%) skewX(-18deg)}}@keyframes mhFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}@keyframes mhGlow{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.0)}50%{box-shadow:0 0 28px 2px rgba(251,191,36,.35)}}.mh-shine{position:relative;overflow:hidden}.mh-shine::after{content:"";position:absolute;top:0;left:0;height:100%;width:35%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);animation:mhShine 4.5s ease-in-out infinite;pointer-events:none}.mh-float{animation:mhFloat 2.6s ease-in-out infinite}.mh-glow{animation:mhGlow 3s ease-in-out infinite}`}</style>
-              {annList.map((n) => {
-                const offer = n.kind === 'offer';
-                return (
-                  <div key={n.id} className={`mh-glow rounded-2xl p-[2px] shadow-xl ${offer ? 'bg-gradient-to-r from-amber-300 via-orange-500 to-rose-500 shadow-amber-500/30' : 'bg-gradient-to-r from-sky-400 via-indigo-500 to-fuchsia-500 shadow-indigo-500/30'}`}>
-                    <div className={`mh-shine flex items-start gap-3.5 rounded-[14px] px-4 py-4 text-white bg-gradient-to-br ${offer ? 'from-[#2b1405] via-[#3d1d08] to-[#4d1c10]' : 'from-[#0e1433] via-[#191650] to-[#2b1459]'}`}>
-                      <div className={`mh-float grid h-12 w-12 shrink-0 place-items-center rounded-xl text-2xl shadow-lg ${offer ? 'bg-gradient-to-br from-amber-300 to-orange-500 shadow-amber-500/40' : 'bg-gradient-to-br from-sky-300 to-indigo-500 shadow-indigo-500/40'}`}>{offer ? '🎁' : '📢'}</div>
-                      <div className="min-w-0 flex-1">
-                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest ${offer ? 'bg-amber-400/20 text-amber-300 ring-1 ring-amber-300/40' : 'bg-sky-400/20 text-sky-200 ring-1 ring-sky-300/40'}`}>{offer ? 'Special offer' : 'Notice'}</span>
-                        <div className={`mt-1.5 text-lg font-black leading-snug bg-clip-text text-transparent bg-gradient-to-r ${offer ? 'from-amber-200 via-yellow-100 to-amber-300' : 'from-sky-100 via-white to-fuchsia-200'}`}>{n.title}</div>
-                        {n.body && <div className="mt-1 text-sm leading-relaxed text-white/85 whitespace-pre-line">{n.body}</div>}
-                      </div>
-                    </div>
-                  </div>);
-              })}
-            </div>)}
+            {annList.length > 0 && (<div className="mb-5 space-y-3">{annList.map((n) => (<NoticeCard key={n.id} kind={n.kind} title={n.title} body={n.body} />))}</div>)}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 p-7 sm:p-9 text-white shadow-xl shadow-indigo-500/25">
               <svg className="absolute right-0 bottom-0 h-full opacity-25" viewBox="0 0 400 200" preserveAspectRatio="xMaxYMax slice"><path d="M0 200 L90 70 L150 140 L240 30 L340 150 L400 90 V200Z" fill="#fff" /><circle cx="330" cy="40" r="22" fill="#fff" /></svg>
               <div className="relative max-w-lg"><div className="text-xs font-bold uppercase tracking-widest opacity-80">Welcome back</div>

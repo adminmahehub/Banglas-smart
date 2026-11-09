@@ -20,6 +20,7 @@ import { copyText, openLink } from '../../lib/nativeBridge';
 import { cleanPhone, parsePlans } from '../Storefront';
 import QrModal from '../QrModal';
 import ResellerPanel from '../ResellerPanel';
+import NoticeCard from '../NoticeCard';
 
 const FN = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ssaqdsqopxclkplstpzj.supabase.co') + '/functions/v1';
 const BASE = FN + '/dns-portal';
@@ -332,12 +333,7 @@ export default function NativeApp() {
         ))}
       </div>
 
-      {notices.slice(0, 2).map((n) => (
-        <div key={n.id} className={`mb-3 rounded-2xl border px-4 py-3 text-sm ${n.kind === 'offer' ? 'border-amber-500/40 bg-amber-500/10 text-amber-600' : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-600'}`}>
-          <div className="font-black">{n.kind === 'offer' ? '🎁 ' : '📢 '}{n.title}</div>
-          {n.body && <div className="mt-0.5 whitespace-pre-line text-xs opacity-90">{n.body}</div>}
-        </div>
-      ))}
+      <div className="mb-3 space-y-3">{notices.slice(0, 2).map((n) => (<NoticeCard key={n.id} kind={n.kind} title={n.title} body={n.body} />))}</div>
 
       <div className={card}>
         <div className="mb-3 text-sm font-black">Works with</div>
