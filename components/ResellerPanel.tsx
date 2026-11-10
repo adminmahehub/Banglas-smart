@@ -160,13 +160,37 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     wgLocked: !!r.wg_locked, wgSeen: r.wg_last_handshake ?? null, wgNote: r.wg_lock_note ?? null,
     ownerId: r.owner_id, customerCode: r.customer_code ?? null,
   });
+  const [pendTrials, setPendTrials] = useState<any[]>([]);
+  const [trialBusyId, setTrialBusyId] = useState('');
+  const loadPendTrials = async () => {
+    const { data } = await supabase.rpc('pending_trials');
+    setPendTrials(Array.isArray(data) ? data : []);
+  };
+  const trialDecide = async (t: any, what: 'approve' | 'reject') => {
+    if (what === 'reject' && !window.confirm(`Reject the trial request of ${t.username}?`)) return;
+    setTrialBusyId(t.username);
+    const { error } = await supabase.rpc(what === 'approve' ? 'approve_trial' : 'reject_trial', { p_username: t.username });
+    setTrialBusyId('');
+    if (error) { window.alert(error.message); return; }
+    await loadPendTrials();
+  };
+  useEffect(() => {
+    if (!user || !isAdmin) { setPendTrials([]); return; }
+    loadPendTrials();
+    const id = setInterval(loadPendTrials, 30000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isAdmin]);
   const resellerAction = async (r: any, action: 'suspend' | 'ban' | 'activate' | 'delete') => {
     const label = { suspend: 'Suspend', ban: 'Permanently BAN', activate: 'Activate', delete: 'DELETE' }[action];
     if (!window.confirm(`${label} reseller "${r.name || r.whatsapp}"?${action === 'delete' ? ' This cannot be undone.' : ''}`)) return;
     setRsBusy(r.id + action);
     const { data, error } = await supabase.functions.invoke('admin-reseller-action', { body: { reseller_id: r.id, action } });
     setRsBusy('');
-    const err = error ? (error.message || 'failed') : (data && data.ok === false ? data.error : '');
+    let err = error ? (error.message || 'failed') : (data && data.ok === false ? data.error : '');
+    if (error) {
+      try { const j = await (error as any).context?.json?.(); if (j?.error) err = String(j.error); } catch { /* keep generic text */ }
+    }
     if (err) { window.alert(err === 'has_customers' ? 'This reseller still has customers. Use Ban instead of Delete.' : `Failed: ${err}`); return; }
     await load();
   };
@@ -834,6 +858,17 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
 
         <div className="p-4 sm:p-8 max-w-6xl mx-auto">
           {tab === 'dashboard' && (<>
+            {isAdmin && pendTrials.length > 0 && (
+              <div className={`${card} p-4 mb-5 border-amber-500/40`}>
+                <div className="mb-2 text-sm font-black text-amber-500">Pending free trials ({pendTrials.length})</div>
+                <div className="space-y-2">{pendTrials.map((t: any) => (
+                  <div key={t.username} className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--soft)] px-3 py-2.5">
+                    <div className="min-w-0 flex-1"><div className="truncate text-sm font-black">{t.name || 'Customer'} · {t.username}</div><div className="text-xs text-[var(--mut)]">ID {t.code}</div></div>
+                    <button type="button" disabled={!!trialBusyId} onClick={() => trialDecide(t, 'approve')} className={`${primary} !px-3 !py-1.5 text-xs`}>Approve</button>
+                    <button type="button" disabled={!!trialBusyId} onClick={() => trialDecide(t, 'reject')} className={`${ghost} !px-3 !py-1.5 text-xs !text-rose-500`}>Reject</button>
+                  </div>))}</div>
+              </div>
+            )}
             <div className={`${card} p-4 mb-5`}>
               <div className="relative"><Search className="absolute left-3.5 top-3.5 h-5 w-5 text-[var(--mut)]" /><input value={dq} onChange={(e) => setDq(e.target.value)} inputMode="search" placeholder="Find customer: phone number or 6-digit ID" className={`${inp} !pl-11 !py-3 text-base`} />{dq && <button type="button" onClick={() => setDq('')} className="absolute right-3 top-3.5"><X className="h-5 w-5 text-[var(--mut)]" /></button>}</div>
               {dq.trim().length >= 3 && (() => {

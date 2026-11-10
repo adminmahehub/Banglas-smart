@@ -16,6 +16,7 @@ import ResellerPanel from './ResellerPanel';
 import { CustomerAccess, parsePlans, cleanPhone } from './Storefront';
 import { supabase } from '../lib/supabase';
 import NoticeCard from './NoticeCard';
+import TrialPending from './TrialPending';
 import { siteOrigin } from '../lib/siteOrigin';
 import { 
   LayoutDashboard, 
@@ -241,14 +242,17 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
   const [trialErr, setTrialErr] = useState('');
   const [trialLink, setTrialLink] = useState('');
   const [trialCode, setTrialCode] = useState('');
+  const [trialPending, setTrialPending] = useState('');
+  const [trialPendingPhone, setTrialPendingPhone] = useState('');
   const submitFreeTrial = async () => {
     setTrialErr('');
     const ph = cleanPhone(trialPhone);
     if (trialName.trim().length < 2) { setTrialErr('Please enter your name'); return; }
     if (!/^[1-9][0-9]{7,14}$/.test(ph)) { setTrialErr('Enter country code and number together, without +. Example: 966501234567 (Saudi), 8801712345678 (Bangladesh), 923001234567 (Pakistan)'); return; }
     setTrialBusy(true);
-    const { data, error } = await supabase.rpc('public_free_trial', { p_name: trialName.trim(), p_phone: ph });
+    const { data, error } = await supabase.rpc('public_free_trial', { p_name: trialName.trim(), p_phone: ph, p_manual: true });
     setTrialBusy(false);
+    if (data?.pending && data?.code) { setTrialPending(String(data.code)); setTrialPendingPhone(ph); return; }
     if (error || !data?.token) { setTrialErr(error?.message || 'Could not create the trial. Please try again.'); return; }
     setTrialLink(`${siteOrigin()}/c/?t=${data.token}`);
     setTrialCode(data.code || '');
@@ -1267,7 +1271,9 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 <p className="text-[11px] text-slate-400 mt-1">Test our service first. No payment, no package needed.</p>
               </div>
 
-              {!trialLink ? (
+              {trialPending ? (
+                <TrialPending phone={trialPendingPhone} code={trialPending} name={trialName.trim()} wa={waBd} dark={theme === 'dark'} />
+              ) : !trialLink ? (
                 <>
                   <input
                     type="text" value={trialName} onChange={(e) => setTrialName(e.target.value)} placeholder="Your name"

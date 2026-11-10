@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import TrialPending from './TrialPending';
 
 export type StorePlan = { label: string; price: string; note?: string; hot?: boolean };
 
@@ -291,6 +292,8 @@ export function CustomerAccess({ onBack, onAccountType }: { theme?: 'dark' | 'li
   const [err, setErr] = useState('');
   const [done, setDone] = useState('');
   const [doneCode, setDoneCode] = useState('');
+  const [pendingCode, setPendingCode] = useState('');
+  const [pendingPhone, setPendingPhone] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
   const copyCode = async () => {
     const text = String(doneCode);
@@ -313,8 +316,9 @@ export function CustomerAccess({ onBack, onAccountType }: { theme?: 'dark' | 'li
     if (name.trim().length < 2) return setErr('Please enter your name');
     if (!/^[1-9][0-9]{7,14}$/.test(ph)) return setErr('Enter country code and number together, without +. Example: 966501234567 (Saudi), 8801712345678 (Bangladesh), 60123456789 (Malaysia)');
     setBusy(true);
-    const { data, error } = await supabase.rpc('public_free_trial', { p_name: name.trim(), p_phone: ph });
+    const { data, error } = await supabase.rpc('public_free_trial', { p_name: name.trim(), p_phone: ph, p_manual: true });
     setBusy(false);
+    if (data?.pending && data?.code) { setPendingCode(String(data.code)); setPendingPhone(ph); return; }
     if (error || !data?.token) return setErr(error?.message || 'Could not create the trial. Please try again.');
     setDone(`${window.location.origin}/c/?t=${data.token}`);
     setDoneCode(data.code || '');
@@ -341,7 +345,8 @@ export function CustomerAccess({ onBack, onAccountType }: { theme?: 'dark' | 'li
           <button onClick={() => { setTab('new'); setErr(''); }} className={`rounded-lg py-2 ${tab === 'new' ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow' : 'text-[var(--mut)]'}`}>New customer</button>
           <button onClick={() => { setTab('link'); setErr(''); }} className={`rounded-lg py-2 ${tab === 'link' ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow' : 'text-[var(--mut)]'}`}>I have my link</button>
         </div>
-        {tab === 'new' && !done && (
+        {tab === 'new' && pendingCode && <TrialPending phone={pendingPhone} code={pendingCode} name={name.trim()} wa={process.env.NEXT_PUBLIC_WA_BD || '8801614082537'} />}
+        {tab === 'new' && !done && !pendingCode && (
           <div className="space-y-3">
             <h3 className="text-lg font-black">Free trial account</h3>
             <input className={pInp} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
