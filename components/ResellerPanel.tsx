@@ -942,7 +942,8 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                 <div className="mb-2 text-sm font-black text-amber-500">Pending free trials ({pendTrials.length})</div>
                 <div className="space-y-2">{pendTrials.map((t: any) => (
                   <div key={t.username} className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--soft)] px-3 py-2.5">
-                    <div className="min-w-0 flex-1"><div className="truncate text-sm font-black">{t.name || 'Customer'} · {t.username}</div><div className="text-xs text-[var(--mut)]">ID {t.code}</div></div>
+                    <div className="min-w-0 flex-1"><div className="truncate text-sm font-black">{t.name || 'Customer'} · {t.username}</div><div className="text-xs text-[var(--mut)]">ID {t.code}{t.created_at ? ` · ${new Date(t.created_at).toLocaleString()}` : ''}{t.ip ? ` · IP ${t.ip}` : ''}</div></div>
+                    <a href={`https://wa.me/${String(t.username).replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className={`${ghost} !px-3 !py-1.5 text-xs`}><MessageCircle className="h-3.5 w-3.5" />WhatsApp</a>
                     <button type="button" disabled={!!trialBusyId} onClick={() => trialDecide(t, 'approve')} className={`${primary} !px-3 !py-1.5 text-xs`}>Approve</button>
                     <button type="button" disabled={!!trialBusyId} onClick={() => trialDecide(t, 'reject')} className={`${ghost} !px-3 !py-1.5 text-xs !text-rose-500`}>Reject</button>
                   </div>))}</div>

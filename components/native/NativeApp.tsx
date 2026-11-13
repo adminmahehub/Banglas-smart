@@ -482,6 +482,7 @@ export default function NativeApp() {
             </ol>
             <p className="mb-3 text-xs text-[var(--mut)]">Keep this config private. It works on one phone only.</p>
             <div className="space-y-2">
+              <button className={ghost} onClick={() => openLink(isIos ? 'https://apps.apple.com/app/wireguard/id1441195209' : 'https://play.google.com/store/apps/details?id=com.wireguard.android')}>1. Get the WireGuard app ({isIos ? 'App Store' : 'Play Store'})</button>
               <button className={primary} disabled={!!wgBusy} onClick={wgShare}>{wgBusy === 'share' ? 'Please wait…' : 'Send to WireGuard'}</button>
               <button className={ghost} disabled={!!wgBusy} onClick={wgQr}>{wgBusy === 'qr' ? 'Please wait…' : 'Show QR code'}</button>
             </div>
@@ -614,14 +615,16 @@ function LoginCard({ onToken }: { onToken: (t: string) => void }) {
     setErr('');
     const ph = cleanPhone(phone);
     const cd = code.replace(/\s/g, '');
-    if (!/^[1-9][0-9]{7,14}$/.test(ph)) return setErr('Enter your phone number with country code, without +. Example: 8801712345678');
-    if (!/^[A-Za-z0-9]{6}$/.test(cd)) return setErr('Enter your 6-digit customer ID.');
+    if (!ph && !cd) return setErr('Enter your phone number or your 6-digit customer ID.');
+    if (ph && !/^[1-9][0-9]{7,14}$/.test(ph)) return setErr('Enter your phone number with country code, without +. Example: 8801712345678');
+    if (cd && !/^[A-Za-z0-9]{6}$/.test(cd)) return setErr('The customer ID has 6 digits.');
     setBusy(true);
     try {
       const r = await fetch(LOGIN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: ph, code: cd, device: await getDeviceId() }) });
       const d = await r.json().catch(() => ({ ok: false, error: 'server_error' }));
       if (d?.ok && d.token) { onToken(d.token); return; }
       setErr(d?.error === 'not_found' ? 'Phone number or customer ID is not correct.'
+        : d?.error === 'need_id' ? 'Please also enter your 6-digit customer ID.'
         : d?.error === 'device_locked' ? 'This account is locked to another phone. Please ask support to unlock it.'
         : d?.error === 'use_link' ? 'This account has more than one allowed phone. Please use the "My link" tab and paste your customer link.'
         : d?.error === 'too_many' ? 'Too many tries. Please wait 30 minutes and try again.'
@@ -658,10 +661,11 @@ function LoginCard({ onToken }: { onToken: (t: string) => void }) {
         {mode === 'phone' && (
           <>
             <input className={inp} inputMode="tel" placeholder="Phone number with country code, no +" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <div className="text-center text-[11px] font-bold uppercase tracking-widest text-[var(--mut)]">or</div>
             <input className={`${inp} text-center font-mono text-lg tracking-[0.3em]`} inputMode="numeric" maxLength={6} placeholder="Customer ID (6 digits)" value={code} onChange={(e) => setCode(e.target.value)} />
             {err && <div className="text-xs font-semibold text-rose-500">{err}</div>}
             <button className={primary} disabled={busy} onClick={loginPhone}>{busy ? 'Please wait…' : 'Log in'}</button>
-            <p className="text-center text-xs text-[var(--mut)]">Your customer ID was shown when your account was created. Ask your seller if you do not have it. Your account works on one phone only.</p>
+            <p className="text-center text-xs text-[var(--mut)]">Enter your phone number OR your customer ID (you can use both). Ask your seller if you do not know your ID. Your account works on one phone only.</p>
           </>
         )}
         {mode === 'link' && (

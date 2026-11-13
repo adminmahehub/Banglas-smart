@@ -248,6 +248,9 @@ export default function CustomerPage() {
                   <p className="mb-3 text-xs text-[#97a0c8]">WireGuard can also scan a QR code: show it on another phone or a computer, then in WireGuard tap + → Scan from QR code. Keep this config private. It works on one phone only.</p>
                   <div className="space-y-2">
                     {plat === 'ios'
+                      ? <a className={ghost} href="https://apps.apple.com/app/wireguard/id1441195209" target="_blank" rel="noreferrer">1. Get the WireGuard app (App Store)</a>
+                      : <a className={ghost} href="https://play.google.com/store/apps/details?id=com.wireguard.android" target="_blank" rel="noreferrer">1. Get the WireGuard app (Play Store)</a>}
+                    {plat === 'ios'
                       ? <button className={primary} disabled={!!wgBusy} onClick={wgOpen}>{wgBusy === 'open' ? 'Please wait…' : 'Open in WireGuard'}</button>
                       : <button className={primary} disabled={!!wgBusy} onClick={wgDownload}>{wgBusy === 'dl' ? 'Please wait…' : 'Download config file'}</button>}
                     <button className={ghost} disabled={!!wgBusy} onClick={wgQr}>{wgBusy === 'qr' ? 'Please wait…' : 'Show QR code'}</button>
