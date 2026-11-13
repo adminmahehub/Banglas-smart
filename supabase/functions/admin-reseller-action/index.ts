@@ -1,7 +1,8 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 // Admin only (deploy WITH verify_jwt = true).
-// POST { reseller_id, action: 'suspend' | 'ban' | 'activate' | 'delete' }
+// POST { reseller_id, action: 'suspend' | 'ban' | 'activate' | 'delete' | 'set_password', new_password? }
+// set_password -> admin sets a new login password for a reseller (for resellers who lost access to their email)
 // suspend/ban  -> profiles.status + auth ban (reseller is signed out and cannot log in again)
 // activate     -> lifts the ban
 // delete       -> removes the login + profile, only if the reseller owns no customers (otherwise use Ban)
@@ -31,7 +32,7 @@ Deno.serve(async (req) => {
   const id = String(body?.reseller_id ?? "");
   const action = String(body?.action ?? "");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ ok: false, error: "bad_id" }, 400);
-  if (!["suspend", "ban", "activate", "delete"].includes(action)) return json({ ok: false, error: "bad_action" }, 400);
+  if (!["suspend", "ban", "activate", "delete", "set_password"].includes(action)) return json({ ok: false, error: "bad_action" }, 400);
   if (id === u.user.id) return json({ ok: false, error: "cannot_act_on_self" }, 400);
 
   const { data: t } = await admin.from("profiles").select("id,role,name").eq("id", id).maybeSingle();
@@ -39,6 +40,15 @@ Deno.serve(async (req) => {
   if (t.role === "admin") return json({ ok: false, error: "cannot_act_on_admin" }, 400);
 
   const log = (m: string) => admin.from("activity_log").insert({ owner_id: u.user.id, message: m }).then(() => {}, () => {});
+
+  if (action === "set_password") {
+    const np = String(body?.new_password ?? "");
+    if (np.length < 8 || np.length > 72) return json({ ok: false, error: "password_8_to_72_characters" }, 400);
+    const { error } = await admin.auth.admin.updateUserById(id, { password: np });
+    if (error) return json({ ok: false, error: "password_failed", detail: error.message }, 500);
+    await log(`Admin reset the password of reseller ${t.name ?? id}`);
+    return json({ ok: true });
+  }
 
   if (action === "delete") {
     const { count } = await admin.from("vpn_accounts").select("id", { count: "exact", head: true }).eq("owner_id", id);

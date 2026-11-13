@@ -87,6 +87,10 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const [prof, setProf] = useState<any>(null);
   const [auth, setAuth] = useState({ email: '', password: '', name: '', whatsapp: '', signup: !!startSignup });
   const [msg, setMsg] = useState('');
+  const [info, setInfo] = useState('');
+  const [forgot, setForgot] = useState(false);
+  const [recovery, setRecovery] = useState(false);
+  const [pw, setPw] = useState({ a: '', b: '', busy: false });
   const [creditTo, setCreditTo] = useState('');
   const [addTab, setAddTab] = useState<'id' | 'new'>('id');
   const [actCode, setActCode] = useState('');
@@ -265,8 +269,9 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
       const c = (new URLSearchParams(window.location.search).get('ref') || sessionStorage.getItem('mh_ref') || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
       if (c && !adminOnly) { setRefCode(c); setAuth((a) => ({ ...a, signup: true })); }
     } catch { /* ignore */ }
+    try { if (/type=recovery/.test(window.location.hash)) setRecovery(true); } catch { /* ignore */ }
     supabase.auth.getSession().then(({ data }) => { setUser(data.session?.user ?? null); setReady(true); });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => setUser(sess?.user ?? null));
+    const { data: sub } = supabase.auth.onAuthStateChange((e, sess) => { if (e === 'PASSWORD_RECOVERY') setRecovery(true); setUser(sess?.user ?? null); });
     return () => sub.subscription.unsubscribe();
   }, []);
   function closeAct() { setActCode(''); setActInfo(null); setActErr(''); setActMonths(1); }
@@ -338,6 +343,37 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
       : await supabase.auth.signInWithPassword({ email: auth.email, password: auth.password });
     if (r.error) return setMsg(r.error.message);
     if (auth.signup && !r.data.session) setMsg('Account created. Check your email to confirm, then log in.');
+  }
+  async function sendReset() {
+    setMsg(''); setInfo('');
+    const em = auth.email.trim();
+    if (!/^\S+@\S+\.\S+$/.test(em)) return setMsg('Enter the email you registered with');
+    const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo: process.env.NEXT_PUBLIC_APP_MODE === 'native' ? siteOrigin() + '/reseller/' : window.location.origin + window.location.pathname });
+    if (error) return setMsg(/rate|seconds|too many/i.test(error.message) ? 'Please wait a minute and try again.' : error.message);
+    setInfo('If this email has an account, a reset link was sent. Check your inbox and spam folder, then open the link.');
+  }
+  async function savePassword() {
+    if (pw.a.length < 8) { alert('Password must be at least 8 characters.'); return; }
+    if (pw.a !== pw.b) { alert('The two passwords do not match.'); return; }
+    setPw((x) => ({ ...x, busy: true }));
+    const { error } = await supabase.auth.updateUser({ password: pw.a });
+    setPw({ a: '', b: '', busy: false });
+    if (error) { alert(error.message); return; }
+    setRecovery(false);
+    try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch { /* ignore */ }
+    alert('Password changed. Use the new password next time you log in.');
+  }
+  async function resetResellerPassword(r: any) {
+    const np = window.prompt(`New password for "${r.name || r.whatsapp}" (min 8 characters). Tell it to the reseller on WhatsApp.`);
+    if (!np) return;
+    if (np.length < 8) { window.alert('Password must be at least 8 characters.'); return; }
+    setRsBusy(r.id + 'pw');
+    const { data, error } = await supabase.functions.invoke('admin-reseller-action', { body: { reseller_id: r.id, action: 'set_password', new_password: np } });
+    setRsBusy('');
+    let err = error ? (error.message || 'failed') : (data && data.ok === false ? data.error : '');
+    if (error) { try { const j = await (error as any).context?.json?.(); if (j?.error) err = String(j.error); } catch { /* keep */ } }
+    if (err) { window.alert(`Failed: ${err}`); return; }
+    window.alert('Password changed. The reseller can log in with the new password now.');
   }
   async function create() {
     setErr('');
@@ -831,6 +867,16 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
 
   const themeVars = (dark ? DARK : LIGHT) as any;
   if (!ready) return <div style={themeVars} className="min-h-screen grid place-items-center bg-[var(--bg)] text-[var(--mut)]">Loading…</div>;
+  if (recovery && user) return (
+    <div style={themeVars} className="min-h-screen grid place-items-center bg-[var(--bg)] p-4 text-[var(--ink)]">
+      <div className={`${card} w-full max-w-sm p-7`}>
+        <div className="mb-5 flex items-center gap-3"><img src="/icon-512.png" alt="MaheHub" className="h-10 w-10 rounded-xl" /><div><div className="font-black">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">SET NEW PASSWORD</div></div></div>
+        <input className={`${inp} mb-3`} type="password" placeholder="New password (min 8)" value={pw.a} onChange={(e) => setPw({ ...pw, a: e.target.value })} />
+        <input className={`${inp} mb-3`} type="password" placeholder="Repeat new password" value={pw.b} onChange={(e) => setPw({ ...pw, b: e.target.value })} />
+        <button className={`${primary} w-full disabled:opacity-50`} disabled={pw.busy} onClick={savePassword}>{pw.busy ? 'Please wait…' : 'Save new password'}</button>
+      </div>
+    </div>
+  );
   if (!user) return (
     <div style={themeVars} className="min-h-screen grid place-items-center bg-[var(--bg)] p-4 text-[var(--ink)]">
       <div className={`${card} w-full max-w-sm p-7`}>
@@ -840,10 +886,15 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
         {auth.signup && <input className={`${inp} mb-3`} placeholder="Name" value={auth.name} onChange={(e) => setAuth({ ...auth, name: e.target.value })} />}
         {auth.signup && <input className={`${inp} mb-3`} inputMode="tel" placeholder="WhatsApp number with country code" value={auth.whatsapp} onChange={(e) => setAuth({ ...auth, whatsapp: e.target.value })} />}
         <input className={`${inp} mb-3`} type="email" placeholder="Email" value={auth.email} onChange={(e) => setAuth({ ...auth, email: e.target.value })} />
-        <input className={`${inp} mb-3`} type="password" placeholder="Password (min 6)" value={auth.password} onChange={(e) => setAuth({ ...auth, password: e.target.value })} />
+        {!forgot && <input className={`${inp} mb-3`} type="password" placeholder="Password (min 6)" value={auth.password} onChange={(e) => setAuth({ ...auth, password: e.target.value })} />}
         {msg && <div className="mb-3 text-sm font-semibold text-rose-500">{msg}</div>}
-        <button className={`${primary} w-full`} onClick={doAuth}>{auth.signup ? 'Create account' : 'Login'}</button>
-        {!adminOnly && <button className="mt-3 w-full text-sm font-semibold text-indigo-500" onClick={() => { setMsg(''); setAuth({ ...auth, signup: !auth.signup }); }}>{auth.signup ? 'Already have an account? Log in' : 'Create a new reseller account'}</button>}
+        {info && <div className="mb-3 text-sm font-semibold text-emerald-500">{info}</div>}
+        {forgot
+          ? <><button className={`${primary} w-full`} onClick={sendReset}>Send reset link</button>
+              <button className="mt-3 w-full text-sm font-semibold text-indigo-500" onClick={() => { setForgot(false); setMsg(''); setInfo(''); }}>← Back to login</button></>
+          : <button className={`${primary} w-full`} onClick={doAuth}>{auth.signup ? 'Create account' : 'Login'}</button>}
+        {!forgot && !auth.signup && <button className="mt-3 w-full text-sm font-semibold text-indigo-500" onClick={() => { setForgot(true); setMsg(''); setInfo(''); }}>Forgot password?</button>}
+        {!adminOnly && !forgot && <button className="mt-3 w-full text-sm font-semibold text-indigo-500" onClick={() => { setMsg(''); setAuth({ ...auth, signup: !auth.signup }); }}>{auth.signup ? 'Already have an account? Log in' : 'Create a new reseller account'}</button>}
         <button className="mt-1 w-full text-xs text-[var(--mut)]" onClick={onStorefront}>← Storefront</button>
       </div>
     </div>
@@ -1090,7 +1141,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
             <Head t={isAdmin ? 'Resellers' : 'My Team'} s={isAdmin ? 'All reseller accounts, who invited them and their team sales' : 'Resellers who joined through your referral link'}><button className={primary} onClick={() => { setRsDone(null); setRsErr(''); setRsModal(true); }}><UserPlus className="h-4 w-4" />Add Reseller</button></Head>
             {isAdmin ? (
               <div className={`${card} overflow-x-auto`}><table className="w-full min-w-[900px] text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wider text-[var(--mut)] bg-[var(--soft)]">{['Name', 'WhatsApp', 'Credits', 'Invited by', 'Team', 'Team sales ৳', 'Joined', 'Status', ''].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr></thead>
-                <tbody>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)', _me: true }] : []), ...((stats?.per_reseller || resellers) as any[])].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{r._me ? '-' : (r.upline_name || 'Admin')}</td><td className="px-4 py-3">{r._me ? '-' : `${r.direct_count ?? 0} direct · ${r.team_count ?? 0} total`}</td><td className="px-4 py-3">{r._me ? '-' : Number(r.team_sales_bdt ?? 0).toLocaleString()}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3">{(() => { const st = r._me ? 'active' : (resellers.find((x: any) => x.id === r.id)?.status || 'active'); return <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${st === 'active' ? 'bg-emerald-500/15 text-emerald-500' : st === 'suspended' ? 'bg-amber-500/15 text-amber-500' : 'bg-rose-500/15 text-rose-500'}`}>{st}</span>; })()}</td><td className="px-4 py-3"><div className="flex flex-wrap gap-1.5"><button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button>{!r._me && (() => { const st = resellers.find((x: any) => x.id === r.id)?.status || 'active'; const b = `${ghost} !px-3 !py-1.5 text-xs disabled:opacity-50`; return <>{st === 'active' ? <button disabled={!!rsBusy} onClick={() => resellerAction(r, 'suspend')} className={b}>Suspend</button> : <button disabled={!!rsBusy} onClick={() => resellerAction(r, 'activate')} className={b}>Activate</button>}{st !== 'banned' && <button disabled={!!rsBusy} onClick={() => resellerAction(r, 'ban')} className={`${b} !text-rose-500`}>Ban</button>}<button disabled={!!rsBusy} onClick={() => resellerAction(r, 'delete')} className={`${b} !text-rose-500`}><Trash2 className="h-3.5 w-3.5" /></button></>; })()}</div></td></tr>)}
+                <tbody>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (you)', _me: true }] : []), ...((stats?.per_reseller || resellers) as any[])].map((r: any) => <tr key={r.id} className="border-t border-[var(--line)]"><td className="px-4 py-3 font-bold">{r.name}</td><td className="px-4 py-3">{r.whatsapp || '-'}</td><td className="px-4 py-3">{r.credits ?? 0}</td><td className="px-4 py-3">{r._me ? '-' : (r.upline_name || 'Admin')}</td><td className="px-4 py-3">{r._me ? '-' : `${r.direct_count ?? 0} direct · ${r.team_count ?? 0} total`}</td><td className="px-4 py-3">{r._me ? '-' : Number(r.team_sales_bdt ?? 0).toLocaleString()}</td><td className="px-4 py-3">{new Date(r.created_at).toLocaleDateString()}</td><td className="px-4 py-3">{(() => { const st = r._me ? 'active' : (resellers.find((x: any) => x.id === r.id)?.status || 'active'); return <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${st === 'active' ? 'bg-emerald-500/15 text-emerald-500' : st === 'suspended' ? 'bg-amber-500/15 text-amber-500' : 'bg-rose-500/15 text-rose-500'}`}>{st}</span>; })()}</td><td className="px-4 py-3"><div className="flex flex-wrap gap-1.5"><button onClick={() => { setCreditTo(r.id); setTopup(0); setTab('credit'); }} className={`${ghost} !px-3 !py-1.5 text-xs`}>Add credit</button>{!r._me && (() => { const st = resellers.find((x: any) => x.id === r.id)?.status || 'active'; const b = `${ghost} !px-3 !py-1.5 text-xs disabled:opacity-50`; return <>{st === 'active' ? <button disabled={!!rsBusy} onClick={() => resellerAction(r, 'suspend')} className={b}>Suspend</button> : <button disabled={!!rsBusy} onClick={() => resellerAction(r, 'activate')} className={b}>Activate</button>}<button disabled={!!rsBusy} onClick={() => resetResellerPassword(r)} className={b}>Reset password</button>{st !== 'banned' && <button disabled={!!rsBusy} onClick={() => resellerAction(r, 'ban')} className={`${b} !text-rose-500`}>Ban</button>}<button disabled={!!rsBusy} onClick={() => resellerAction(r, 'delete')} className={`${b} !text-rose-500`}><Trash2 className="h-3.5 w-3.5" /></button></>; })()}</div></td></tr>)}
                   {resellers.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-[var(--mut)]">No resellers</td></tr>}</tbody></table></div>
             ) : (<>
               {refInfo?.code && <div className={`${card} p-4 mb-4 flex flex-wrap items-center gap-3 text-sm`}><Link2 className="h-4 w-4 text-indigo-500" /><span className="text-[var(--mut)]">Your invite link:</span><b className="break-all">{typeof window !== 'undefined' ? siteOrigin() : ''}/?ref={refInfo.share_code || refInfo.code}</b><button className={`${ghost} !py-1.5 ml-auto`} onClick={() => flash('ref2', `${siteOrigin()}/?ref=${refInfo.share_code || refInfo.code}`)}>{copied === 'ref2' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div>}
@@ -1300,6 +1351,12 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
               <div><label className="text-xs font-bold text-[var(--mut)]">WhatsApp</label><input value={pWa} onChange={(e) => setPWa(e.target.value)} placeholder="+880…" className={inp} /></div>
               <div className="text-xs text-[var(--mut)]">Role: <b>{prof?.role}</b></div>
               <button className={primary} onClick={saveProfile}>Save</button></div>
+            <div className={`${card} p-6 max-w-lg mt-4 space-y-3`}>
+              <h3 className="font-black text-[var(--ink)]">Change password</h3>
+              <input className={inp} type="password" placeholder="New password (min 8)" value={pw.a} onChange={(e) => setPw({ ...pw, a: e.target.value })} />
+              <input className={inp} type="password" placeholder="Repeat new password" value={pw.b} onChange={(e) => setPw({ ...pw, b: e.target.value })} />
+              <button className={`${primary} disabled:opacity-50`} disabled={pw.busy} onClick={savePassword}>{pw.busy ? 'Please wait…' : 'Change password'}</button>
+            </div>
             {refInfo?.code && (
               <div className={`${card} p-6 max-w-lg mt-4 space-y-3`}>
                 <h3 className="font-black text-[var(--ink)]">Refer & earn</h3>
