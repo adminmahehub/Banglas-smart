@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   CustomerAccount, 
   ResellerAgency, 
@@ -14,6 +14,8 @@ import {
 } from '../lib/suauthData';
 import ResellerPanel from './ResellerPanel';
 import { CustomerAccess, parsePlans, cleanPhone } from './Storefront';
+import { CustomBlock } from './SiteBlocks';
+import { parseContent, orderedIds, tx, themeCss, embedFor, DEFAULT_BRAND } from '../lib/siteContent';
 import { supabase } from '../lib/supabase';
 import NoticeCard from './NoticeCard';
 import TrialPending from './TrialPending';
@@ -283,6 +285,16 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
   const [activeSetupTab, setActiveSetupTab] = useState<'iphone' | 'android'>('iphone');
   const [resellerSalesSlider, setResellerSalesSlider] = useState<number>(50);
   const [site, setSite] = useState<Record<string, string>>({});
+  const sc = useMemo(() => parseContent(site.site_content), [site.site_content]);
+  const ids = orderedIds(sc);
+  const show = (id: string) => ids.includes(id) && !(sc.hidden || []).includes(id);
+  // negative: sections always come before the other blocks of this container (contact cards, footer)
+  const ord = (id: string) => ids.indexOf(id) - 1000;
+  const themeStyle = themeCss(sc.theme);
+  const brandName = sc.brand?.name || DEFAULT_BRAND.name;
+  const brandTag = sc.brand?.tagline || DEFAULT_BRAND.tagline;
+  const brandLogo = sc.brand?.logo || DEFAULT_BRAND.logo;
+  const heroVid = embedFor(sc.hero?.video);
   const [notices, setNotices] = useState<{ id: string; kind: string; title: string; body: string }[]>([]);
   const [hiddenNotices, setHiddenNotices] = useState<string[]>([]);
   const price = Number(site.price_per_credit) || 200;
@@ -814,9 +826,10 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
   });
 
   return (
-    <div className={`min-h-screen font-sans antialiased transition-colors duration-300 ${
+    <div className={`mh-root ${theme === 'dark' ? 'mh-dark' : 'mh-light'} min-h-screen font-sans antialiased transition-colors duration-300 ${
       theme === 'dark' ? 'bg-[#070b18] text-slate-100 selection:bg-cyan-500 selection:text-black' : 'bg-slate-100 text-slate-900 selection:bg-cyan-400 selection:text-slate-900'
     }`}>
+      {themeStyle && <style dangerouslySetInnerHTML={{ __html: themeStyle }} />}
       
       {/* Floating In-App Toast Notification */}
       {toastMessage && (
@@ -852,17 +865,17 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
           
           <div className="flex items-center justify-between w-full sm:w-auto gap-3">
             <div className="flex items-center gap-2">
-              <img src="/icon-512.png" alt="MaheHub" className="h-9 w-9 rounded-xl shadow-md shrink-0" />
+              <img src={brandLogo} alt={brandName} className="h-9 w-9 rounded-xl shadow-md shrink-0 object-cover" />
               <div>
                 <span className={`font-mono font-black uppercase tracking-wider text-xs block leading-tight ${
                   theme === 'dark' ? 'text-cyan-400' : 'text-cyan-800'
                 }`}>
-                  MAHEHUB.COM
+                  {brandName}
                 </span>
                 <span className={`text-[10px] block leading-none font-medium ${
                   theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
                 }`}>
-                  Smart DNS &amp; Residential VPN
+                  {brandTag}
                 </span>
               </div>
             </div>
@@ -1011,7 +1024,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
         : <ResellerPanel startSignup={startSignup} onAccountType={setAccountType} onLogout={() => setCurrentView('store')} onStorefront={goHome} />)}
 
       {(currentView === 'home' || currentView === 'store') && (
-        <div className="space-y-16 pb-20 relative">
+        <div className="flex flex-col gap-16 pb-20 relative">
 
           {/* Floating Persistent Theme Toggle Button (Mobile & Desktop Visible) */}
           <div className="fixed bottom-6 left-6 z-50 animate-bounce duration-1000">
@@ -1033,13 +1046,15 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
           </div>
 
           {/* HERO SECTION with High-Tech Dhaka Network Backdrop */}
+          {show('hero') && (<div style={{ order: ord('hero') }}>
           <section className="relative pt-12 pb-20 px-4 sm:px-6 overflow-hidden">
             <div 
               className={`absolute inset-0 bg-cover bg-center pointer-events-none transition-opacity ${
                 theme === 'dark' ? 'opacity-30 mix-blend-screen' : 'opacity-10 mix-blend-multiply'
               }`}
-              style={{ backgroundImage: `url('/images/telecom_hero_bg.jpg')` }}
+              style={{ backgroundImage: `url('${sc.hero?.bg_image || '/images/telecom_hero_bg.jpg'}')` }}
             ></div>
+            {heroVid.kind === 'video' && <video src={heroVid.src} autoPlay muted loop playsInline className="absolute inset-0 h-full w-full object-cover opacity-40 pointer-events-none" />}
 
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-cyan-500/15 blur-[120px] rounded-full pointer-events-none"></div>
 
@@ -1049,7 +1064,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 theme === 'dark' ? 'bg-slate-900/80 border-cyan-500/40 text-cyan-300' : 'bg-white border-cyan-600 text-cyan-800 shadow-sm'
               }`}>
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
-                <span>BDIX 10G DEDICATED DHAKA CLUSTER • ONLINE (12ms PING)</span>
+                <span>{tx(sc, 'hero.badge', 'BDIX 10G DEDICATED DHAKA CLUSTER • ONLINE (12ms PING)')}</span>
               </div>
 
               <div className="space-y-3 max-w-4xl mx-auto">
@@ -1152,13 +1167,13 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                   className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/25 transition-all flex items-center gap-2 hover:scale-105"
                 >
                   <Download className="h-4 w-4" />
-                  <span>Download iOS Profile</span>
+                  <span>{tx(sc, 'hero.btn1', 'Download iOS Profile')}</span>
                 </a>
 
                 {customerHome ? (
                 <a href="#rates-section" className="px-8 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black text-sm shadow-xl shadow-blue-600/25 transition-all flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-amber-300" />
-                  <span>See rates</span>
+                  <span>{tx(sc, 'hero.btn2', 'See rates')}</span>
                 </a>
                 ) : (
                 <button
@@ -1174,11 +1189,14 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 </button>
                 )}
               </div>
+              {sc.hero?.image && <img src={sc.hero.image} alt="" loading="lazy" className="mx-auto mt-6 max-h-[420px] w-auto max-w-full rounded-3xl shadow-2xl" />}
 
             </div>
           </section>
+          </div>)}
 
           {/* INTERACTIVE GENERATOR CARD (Audio 6 & Screenshot 2) */}
+          {show('generator') && (<div style={{ order: ord('generator') }}>
           <section id="generator-section" className="max-w-4xl mx-auto px-4 sm:px-6">
             <div className={`rounded-3xl p-6 sm:p-10 border shadow-2xl space-y-6 transition-all ${
               theme === 'dark'
@@ -1190,13 +1208,13 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 <span className={`px-3 py-1 rounded-full font-mono text-xs font-bold uppercase tracking-wider border ${
                   theme === 'dark' ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-300' : 'bg-cyan-50 border-cyan-200 text-cyan-800'
                 }`}>
-                  Automated Mobile Profile Setup
+                  {tx(sc, 'gen.tag', 'Automated Mobile Profile Setup')}
                 </span>
                 <h2 className={`text-2xl sm:text-3xl font-black ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                  iOS &amp; Android Profile Downloader
+                  {tx(sc, 'gen.title', 'iOS & Android Profile Downloader')}
                 </h2>
                 <p className={`text-xs sm:text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                  আপনার রিসেলারের দেওয়া টোকেন হোস্টনেমটি বসিয়ে ১-ক্লিকে ডাউনলোড করুন
+                  {tx(sc, 'gen.sub', 'আপনার রিসেলারের দেওয়া টোকেন হোস্টনেমটি বসিয়ে ১-ক্লিকে ডাউনলোড করুন')}
                 </p>
               </div>
 
@@ -1321,17 +1339,19 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
               </div>
             </div>
           </section>
+          </div>)}
 
           {/* PACKAGE RATES */}
+          {show('rates') && (<div style={{ order: ord('rates') }}>
           <section id="rates-section" className="max-w-6xl mx-auto px-4 sm:px-6 space-y-8 text-center">
             <div className="space-y-2 max-w-xl mx-auto">
               <span className={`px-3 py-1 rounded-full font-mono text-xs font-bold uppercase tracking-wider border ${
                 theme === 'dark' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-800'
               }`}>
-                Expat Package Rates
+                {tx(sc, 'rates.tag', 'Expat Package Rates')}
               </span>
               <h2 className={`text-3xl sm:text-4xl font-black ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                আমাদের প্রিমিয়াম প্যাকেজ রেট
+                {tx(sc, 'rates.title', 'আমাদের প্রিমিয়াম প্যাকেজ রেট')}
               </h2>
             </div>
 
@@ -1467,12 +1487,14 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
               <p className={`text-xs max-w-xl mx-auto ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{customerHome ? site.store_note : site.reseller_note}</p>
             )}
           </section>
+          </div>)}
 
           {/* SETUP GUIDES */}
+          {show('setup') && (<div style={{ order: ord('setup') }}>
           <section id="setup-section" className="max-w-4xl mx-auto px-4 sm:px-6 space-y-6">
             <div className="text-center space-y-2">
               <h2 className="text-2xl sm:text-3xl font-black text-white">
-                ১০ সেকেন্ডে সহজ সেটআপ গাইড
+                {tx(sc, 'setup.title', '১০ সেকেন্ডে সহজ সেটআপ গাইড')}
               </h2>
             </div>
 
@@ -1546,18 +1568,21 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
               )}
             </div>
           </section>
+          </div>)}
 
+          {(sc.custom || []).filter((c) => orderedIds(sc).includes(c.id)).map((c) => (<div key={c.id} style={{ order: ord(c.id) }}><CustomBlock c={c} dark={theme === 'dark'} /></div>))}
           {!customerHome && (<>
           {/* RESELLER OPPORTUNITY */}
+          {show('reseller') && (<div style={{ order: ord('reseller') }}>
           <section id="reseller-section" className="max-w-4xl mx-auto px-4 sm:px-6">
             <div className="bg-gradient-to-r from-amber-950/40 via-[#181f3d] to-blue-950/40 rounded-3xl p-6 sm:p-10 border border-amber-500/30 shadow-2xl space-y-6">
               
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
                 <div>
                   <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-mono text-xs font-bold uppercase tracking-wider border border-amber-500/30">
-                    Reseller Agency Network
+                    {tx(sc, 'res.tag', 'Reseller Agency Network')}
                   </span>
-                  <h3 className="text-2xl font-black text-white mt-1">রিসেলার বিজনেস শুরু করুন (MaheHub)</h3>
+                  <h3 className="text-2xl font-black text-white mt-1">{tx(sc, 'res.title', 'রিসেলার বিজনেস শুরু করুন (MaheHub)')}</h3>
                   <p className="text-xs text-slate-300">হোলসেল প্যাকেজ: <strong>১০ ক্রেডিট = ৳{bnDigits(10 * price)}</strong> (১ ক্রেডিট = ১ মাস DNS)</p>
                 </div>
 
@@ -1566,7 +1591,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                   className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-xl transition-all flex items-center gap-1.5 shrink-0"
                 >
                   <Lock className="h-4 w-4" />
-                  <span>MaheHub Seller Login</span>
+                  <span>{tx(sc, 'res.btn', 'MaheHub Seller Login')}</span>
                 </button>
               </div>
 
@@ -1608,10 +1633,12 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
 
             </div>
           </section>
+          </div>)}
 
           {/* ========================================================================= */}
           {/* B2B SERVER CONNECT & 1-CLICK CUSTOMER DELIVERY API (Client Audio Feature) */}
           {/* ========================================================================= */}
+          {show('api') && (<div style={{ order: ord('api') }}>
           <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
             <div className={`p-8 sm:p-10 rounded-3xl border transition-all ${
               theme === 'dark' 
@@ -1624,11 +1651,11 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
                     <span className="text-[11px] font-mono uppercase tracking-widest text-cyan-400 font-bold">
-                      Enterprise B2B Architecture
+                      {tx(sc, 'api.tag', 'Enterprise B2B Architecture')}
                     </span>
                   </div>
                   <h3 className={`text-2xl sm:text-3xl font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                    Connect Your Website or Server to MaheHub
+                    {tx(sc, 'api.title', 'Connect Your Website or Server to MaheHub')}
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
                     Any agency or reseller can connect their own website or server directly to our high-speed streaming servers through the API. With the 1-Click customer auto-delivery system, your users instantly receive their hostname and profile.
@@ -1851,6 +1878,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
 
             </div>
           </section>
+          </div>)}
 
           </>)}
 

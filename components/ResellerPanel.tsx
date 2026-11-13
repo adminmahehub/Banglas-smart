@@ -2,9 +2,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Network, PlusCircle, Activity, KeyRound, UserCircle, LogOut, Search,
-  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone, ShieldCheck, QrCode, Smartphone,
+  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone, ShieldCheck, QrCode, Smartphone, LayoutPanelTop,
 } from 'lucide-react';
 import NoticeCard from './NoticeCard';
+import SiteEditor from './SiteEditor';
 import type { VpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
 import { COUNTRIES } from '../lib/countries';
@@ -12,13 +13,14 @@ import QrModal from './QrModal';
 import { siteOrigin } from '../lib/siteOrigin';
 import { openLink, saveTextFile } from '../lib/nativeBridge';
 
-type Tab = 'dashboard' | 'users' | 'resellers' | 'credit' | 'site' | 'activity' | 'api' | 'profile';
+type Tab = 'dashboard' | 'users' | 'resellers' | 'credit' | 'site' | 'editor' | 'activity' | 'api' | 'profile';
 const NAV: { id: Tab; label: string; icon: any }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'resellers', label: 'Resellers', icon: Network },
   { id: 'credit', label: 'Add Credit', icon: PlusCircle },
   { id: 'site', label: 'Site & Notices', icon: Megaphone },
+  { id: 'editor', label: 'Website Editor', icon: LayoutPanelTop },
   { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'api', label: 'API', icon: KeyRound },
   { id: 'profile', label: 'User Profile', icon: UserCircle },
@@ -909,7 +911,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
           <div className="leading-tight"><div className="font-black tracking-tight">MAHEHUB</div><div className="text-[10px] font-bold text-indigo-500 tracking-widest">{mode === 'vpn' ? 'VPN PANEL' : 'DNS PANEL'}</div></div>
           <button className="ml-auto lg:hidden" onClick={() => setMenu(false)}><X className="h-5 w-5" /></button>
         </div>
-        <nav className="space-y-1 flex-1">{NAV.filter((n) => n.id !== 'site' || isAdmin).map(({ id, label, icon: I }) => (
+        <nav className="space-y-1 flex-1">{NAV.filter((n) => (n.id !== 'site' && n.id !== 'editor') || isAdmin).map(({ id, label, icon: I }) => (
           <button key={id} onClick={() => { setTab(id); setMenu(false); }}
             className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${tab === id ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/25' : 'text-[var(--mut)] hover:bg-[var(--soft)] hover:text-[var(--ink)]'}`}>
             <I className="h-[18px] w-[18px]" />{label}</button>))}
@@ -1257,6 +1259,10 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                 </div>)}
               </div></>)}</>)}
 
+          {tab === 'editor' && isAdmin && (<>
+            <Head t="Website Editor" s="Change colours, pictures, videos, texts and sections of the public website" />
+            <SiteEditor cls={{ inp, card, primary, ghost }} />
+          </>)}
           {tab === 'activity' && (<><Head t="Activity" s="Recent panel activity" />
             <div className={`${card} divide-y divide-[var(--line)]`}>{log.map((l, i) => <div key={i} className="flex gap-4 px-5 py-3.5 text-sm"><span className="w-44 shrink-0 text-xs text-[var(--mut)]">{l.t}</span><span className="font-semibold">{l.m}</span></div>)}</div></>)}
 
