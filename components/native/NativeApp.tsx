@@ -21,6 +21,7 @@ import { cleanPhone, parsePlans } from '../Storefront';
 import QrModal from '../QrModal';
 import ResellerPanel from '../ResellerPanel';
 import NoticeCard from '../NoticeCard';
+import TrialPending from '../TrialPending';
 
 const FN = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ssaqdsqopxclkplstpzj.supabase.co') + '/functions/v1';
 const BASE = FN + '/dns-portal';
@@ -589,6 +590,10 @@ export default function NativeApp() {
 }
 
 function LoginCard({ onToken }: { onToken: (t: string) => void }) {
+  const [pendCode, setPendCode] = useState('');
+  const [pendPhone, setPendPhone] = useState('');
+  const [waNum, setWaNum] = useState('8801614082537');
+  useEffect(() => { supabase.from('app_settings').select('value').eq('key', 'support_whatsapp_bd').maybeSingle().then(({ data }) => { if (data?.value) setWaNum(String(data.value)); }); }, []);
   const [mode, setMode] = useState<'phone' | 'new' | 'link'>('phone');
   const [link, setLink] = useState('');
   const [name, setName] = useState('');
@@ -631,8 +636,9 @@ function LoginCard({ onToken }: { onToken: (t: string) => void }) {
     if (name.trim().length < 2) return setErr('Please enter your name');
     if (!/^[1-9][0-9]{7,14}$/.test(ph)) return setErr('Enter country code and number together, without +. Example: 966501234567, 8801712345678, 60123456789');
     setBusy(true);
-    const { data, error } = await supabase.rpc('public_free_trial', { p_name: name.trim(), p_phone: ph, p_device: await getDeviceId() });
+    const { data, error } = await supabase.rpc('public_free_trial', { p_name: name.trim(), p_phone: ph, p_device: await getDeviceId(), p_manual: true });
     setBusy(false);
+    if (data?.pending && data?.code) { setPendCode(String(data.code)); setPendPhone(ph); return; }
     if (error || !data?.token) return setErr(error?.message || 'Could not create the trial. Please try again.');
     onToken(data.token);
   }
@@ -667,7 +673,8 @@ function LoginCard({ onToken }: { onToken: (t: string) => void }) {
             <p className="text-center text-xs text-[var(--mut)]">Tip: if your seller sent you the link on WhatsApp, just tap it and this app opens.</p>
           </>
         )}
-        {mode === 'new' && (
+        {mode === 'new' && pendCode && <TrialPending phone={pendPhone} code={pendCode} name={name.trim()} wa={waNum} onToken={onToken} onOpen={(u) => openLink(u)} />}
+        {mode === 'new' && !pendCode && (
           <>
             <input className={inp} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
             <input className={inp} inputMode="tel" placeholder="WhatsApp number with country code, no +" value={phone} onChange={(e) => setPhone(e.target.value)} />

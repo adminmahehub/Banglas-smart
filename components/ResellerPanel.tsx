@@ -54,6 +54,27 @@ async function shrinkImage(file: File): Promise<Blob> {
 }
 function copy(t: string) { try { navigator.clipboard?.writeText(t); } catch { /* ignore */ } }
 
+/** "Mozilla/5.0 (Linux; Android 17; SM-A366B Build/...; wv) ..." -> "Samsung SM-A366B (Android, app)" */
+function phoneLabel(ua?: string | null): string {
+  const u = String(ua || '');
+  if (!u) return 'Unknown device';
+  const inApp = /;\s*wv\)/.test(u) || /\bwv\b/.test(u);
+  if (/iPhone|iPad|iPod/.test(u)) return `${/iPad/.test(u) ? 'iPad' : 'iPhone'} (iOS${inApp ? ', app' : ''})`;
+  const a = u.match(/Android[^;)]*;\s*([^;)]+?)(?:\s+Build\/[^;)]*)?[;)]/);
+  if (a) {
+    let m = a[1].trim();
+    if (/^SM-/i.test(m)) m = 'Samsung ' + m;
+    else if (/^(Pixel)/i.test(m)) m = 'Google ' + m;
+    else if (/^(CPH|RMX)/i.test(m)) m = (/^CPH/i.test(m) ? 'Oppo ' : 'Realme ') + m;
+    else if (/^(M\d{4}|2\d{7}|Redmi|POCO)/i.test(m)) m = 'Xiaomi ' + m;
+    return `${m} (Android${inApp ? ', app' : ''})`;
+  }
+  if (/Windows/.test(u)) return 'Windows computer';
+  if (/Macintosh/.test(u)) return 'Mac computer';
+  if (/Linux/.test(u)) return 'Linux / Android device';
+  return u.slice(0, 40);
+}
+
 export default function ResellerPanel({ onLogout, onStorefront, startSignup, adminOnly, onAccountType, initialDark }: { onLogout: () => void; onStorefront: () => void; startSignup?: boolean; adminOnly?: boolean; onAccountType?: (v: 'reseller' | 'customer') => void; initialDark?: boolean }) {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [dark, setDark] = useState(!!initialDark);
@@ -254,14 +275,19 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     setActErr(''); setActInfo(null); setActBusy(true);
     const { data, error } = await supabase.rpc('preview_customer', { p_code: actCode });
     setActBusy(false);
-    if (error) setActErr(error.message); else setActInfo(data);
+    if (error) setActErr(error.message); else { setActInfo(data); setActMonths(data?.status === 'pending' ? 0 : 1); }
   }
   async function activateCustomer() {
     setActErr(''); setActBusy(true);
-    const { data, error } = await supabase.rpc('activate_customer', { p_code: actCode, p_months: actMonths });
+    const trial = actMonths === 0;
+    const { data, error } = trial
+      ? await supabase.rpc('approve_trial_by_code', { p_code: actCode })
+      : await supabase.rpc('activate_customer', { p_code: actCode, p_months: actMonths });
     setActBusy(false);
     if (error) { setActErr(error.message); return; }
-    alert(`Customer ${data?.username || ''} activated for ${actMonths} month(s). Valid until ${data?.expiry_date}. The customer is now in your list.`);
+    alert(trial
+      ? `Free trial approved for ${data?.username || ''} (1 hour, no credit used). Tell the customer to press "Check status". The customer is now in your list.`
+      : `Customer ${data?.username || ''} activated for ${actMonths} month(s). Valid until ${data?.expiry_date}. The customer is now in your list.`);
     closeAdd(); load();
   }
   useEffect(() => { if (user) load(); else { setProf(null); setAccounts([]); } }, [user]);
@@ -893,10 +919,15 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                   ? <div className="mt-3 text-sm text-[var(--mut)] text-center py-2">No customer found for this link or ID.</div>
                   : <div className="mt-3 space-y-2 rounded-xl border border-[var(--line)] bg-[var(--soft)] p-3 text-sm">
                       <div className="font-black">{lkRes.username}{lkRes.customer_code ? <span className="ml-2 text-xs font-bold text-[var(--mut)]">ID {lkRes.customer_code}</span> : null}</div>
-                      <div className="text-xs text-[var(--mut)]">{String(lkRes.service).toUpperCase()} · {String(lkRes.status)} · Expires {lkRes.expiry}{isAdmin && lkRes.owner_id ? ` · Seller: ${ownerNames[lkRes.owner_id] || 'Admin'}` : ''}</div>
+                      <div className="text-xs text-[var(--mut)]">{String(lkRes.service).toUpperCase()} · {String(lkRes.status)} · Expires {lkRes.expiry}</div>
+                      <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5 text-xs">
+                        <span className="text-[var(--mut)]">Seller</span><b>{lkRes.owner_id ? (ownerNames[lkRes.owner_id] || 'Admin') : '—'}</b>
+                        <span className="text-[var(--mut)]">Approved by</span><b>{lkRes.approved_by_name ? `${lkRes.approved_by_name}${lkRes.approved_at ? ' · ' + new Date(lkRes.approved_at).toLocaleString() : ''}` : (lkRes.plan && /instant/i.test(String(lkRes.plan)) ? 'Nobody (instant trial from the app/website)' : '—')}</b>
+                        <span className="text-[var(--mut)]">Plan</span><b>{lkRes.plan || '—'}</b>
+                      </div>
                       <div className="text-xs">Linked IP: <b>{lkRes.bound_ip || 'none'}</b> · Allowed phones: <b>{lkRes.max_devices}</b></div>
-                      {(lkRes.devices || []).length > 0 && <div className="text-xs"><div className="font-bold">Phones</div>{(lkRes.devices || []).map((d: any, i: number) => (<div key={i} className="text-[var(--mut)] break-words">{d.id} · {d.country || '—'} · {d.ip || ''} · last {d.last_seen ? new Date(d.last_seen).toLocaleString() : ''}<div className="opacity-70">{d.ua || ''}</div></div>))}</div>}
-                      {(lkRes.log || []).length > 0 && <div className="text-xs"><div className="font-bold">Recent activity</div>{(lkRes.log || []).map((l: any, i: number) => (<div key={i} className="text-[var(--mut)] break-words">{l.at ? new Date(l.at).toLocaleString() : ''} · {l.event} · {l.ip || ''} · {l.country || '—'}</div>))}</div>}
+                      {(lkRes.devices || []).length > 0 && <div className="text-xs"><div className="font-bold">Phones</div>{(lkRes.devices || []).map((d: any, i: number) => (<div key={i} className="mt-1 rounded-lg bg-[var(--card)] px-2.5 py-2"><div className="font-bold">{phoneLabel(d.ua)}</div><div className="text-[var(--mut)]">Country: <b className="text-[var(--ink)]">{d.country || 'Unknown'}</b> · IP: <b className="text-[var(--ink)]">{d.ip || '—'}</b></div><div className="text-[var(--mut)]">Last seen {d.last_seen ? new Date(d.last_seen).toLocaleString() : '—'}</div></div>))}</div>}
+                      {(lkRes.log || []).length > 0 && <div className="text-xs"><div className="font-bold">Recent activity</div>{(lkRes.log || []).map((l: any, i: number) => (<div key={i} className="text-[var(--mut)] break-words">{l.at ? new Date(l.at).toLocaleString() : ''} · {({ trial: 'Trial request', activate: 'Opened on phone' } as Record<string, string>)[l.event] || l.event} · {l.ip || ''}{l.country ? ` · ${l.country}` : ''}</div>))}</div>}
                     </div>)}
               </div>
             </div>
@@ -1325,9 +1356,13 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                   <div className="font-bold">Phone ending •••• {actInfo.phone_hint}</div>
                   <div className="text-xs text-[var(--mut)]">{actInfo.mine ? 'Already your customer' : actInfo.trial ? 'Free trial customer' : 'New customer'} · status: {actInfo.status}</div>
                 </div>
-                <select className={inp} value={actMonths} onChange={(e) => setActMonths(Number(e.target.value))}>{[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''} ({isAdmin ? 'free for admin' : `${m} credit${m > 1 ? 's' : ''}`})</option>)}</select>
-                {!isAdmin && <div className="text-xs text-[var(--mut)]">Your credits: {credits}{credits < actMonths ? ' — not enough for this plan' : ''}</div>}
-                <button disabled={actBusy || (!isAdmin && credits < actMonths)} className={`${primary} w-full disabled:opacity-50`} onClick={activateCustomer}>{actBusy ? 'Please wait…' : 'Activate customer'}</button>
+                <select className={inp} value={actMonths} onChange={(e) => setActMonths(Number(e.target.value))}>
+                  {actInfo.status === 'pending' && <option value={0}>Free trial · 1 hour (0 credit)</option>}
+                  {[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''} ({isAdmin ? 'free for admin' : `${m} credit${m > 1 ? 's' : ''}`})</option>)}
+                </select>
+                {!isAdmin && actMonths > 0 && <div className="text-xs text-[var(--mut)]">Your credits: {credits}{credits < actMonths ? ' — not enough for this plan' : ''}</div>}
+                {actMonths === 0 && <div className="text-xs text-[var(--mut)]">The customer becomes yours. No credit is used.</div>}
+                <button disabled={actBusy || (!isAdmin && actMonths > 0 && credits < actMonths)} className={`${primary} w-full disabled:opacity-50`} onClick={activateCustomer}>{actBusy ? 'Please wait…' : actMonths === 0 ? 'Approve free trial' : 'Activate customer'}</button>
               </div>
             )}
             {actErr && <div className="mt-3 text-xs font-bold text-rose-500">{actErr}</div>}

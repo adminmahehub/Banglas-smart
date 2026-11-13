@@ -51,8 +51,19 @@ Deno.serve(async (req) => {
     } catch (_e) { /* setting unreadable: keep the old behaviour */ }
   }
   const ua = (req.headers.get("user-agent") ?? "").slice(0, 300);
+  // Country / city for the admin screen: full country name from the header if present, otherwise one quick IP lookup (max 1.5 s).
   const cc = (req.headers.get("cf-ipcountry") ?? "").trim().slice(0, 2).toUpperCase();
-  const country = /^[A-Z]{2}$/.test(cc) ? cc : null;
+  let country: string | null = null;
+  if (/^[A-Z]{2}$/.test(cc)) {
+    try { country = new Intl.DisplayNames(["en"], { type: "region" }).of(cc) ?? cc; } catch (_e) { country = cc; }
+  }
+  if (!country) {
+    try {
+      const r = await fetch(`https://ipwho.is/${ip}?fields=success,country,city`, { signal: AbortSignal.timeout(1500) });
+      const g = await r.json();
+      if (g?.success && g.country) country = (g.city ? `${g.country}, ${g.city}` : String(g.country)).slice(0, 80);
+    } catch (_e) { /* no lookup: leave empty */ }
+  }
 
   // If the customer has WireGuard switched on, this IP is the VPN server, shared by all VPN customers. Never bind that.
   try {
