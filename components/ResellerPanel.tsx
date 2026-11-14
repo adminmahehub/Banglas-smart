@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import NoticeCard from './NoticeCard';
 import SiteEditor from './SiteEditor';
-import { B2BAdminCard } from './B2BRequest';
+import { B2BAdminCard, B2BKeysCard } from './B2BRequest';
 import type { VpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
 import { COUNTRIES } from '../lib/countries';
@@ -985,6 +985,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
         <div className="p-4 sm:p-8 max-w-6xl mx-auto">
           {tab === 'dashboard' && (<>
             {isAdmin && <B2BAdminCard cls={{ card, primary, ghost }} />}
+            {isAdmin && <B2BKeysCard cls={{ card, primary, ghost }} />}
             {isAdmin && pendTrials.length > 0 && (
               <div className={`${card} p-4 mb-5 border-amber-500/40`}>
                 <div className="mb-2 text-sm font-black text-amber-500">Pending free trials ({pendTrials.length})</div>

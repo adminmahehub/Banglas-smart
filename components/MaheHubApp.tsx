@@ -15,7 +15,7 @@ import {
 import ResellerPanel from './ResellerPanel';
 import { CustomerAccess, parsePlans, cleanPhone } from './Storefront';
 import { CustomBlock } from './SiteBlocks';
-import { B2BRequestForm } from './B2BRequest';
+import { B2BRequestForm, B2BDocs } from './B2BRequest';
 import { parseContent, orderedIds, tx, themeCss, embedFor, DEFAULT_BRAND } from '../lib/siteContent';
 import { supabase } from '../lib/supabase';
 import NoticeCard from './NoticeCard';
@@ -1698,6 +1698,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
               </div>
 
               <B2BRequestForm dark={theme === 'dark'} waNumber={waBd} />
+              <B2BDocs dark={theme === 'dark'} />
 
               {/* 3 Pillars */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
