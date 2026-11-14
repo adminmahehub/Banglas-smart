@@ -143,6 +143,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const [reqs, setReqs] = useState<any[]>([]);
   const [pay, setPay] = useState({ method: 'bKash', number: '', price: 200, vpn: 200 });
   const unit = ck === 'vpn' ? pay.vpn : pay.price;
+  useEffect(() => { setCk(mode); }, [mode]); // Add Credit follows the panel you are in
   const [reqCredits, setReqCredits] = useState<number>(10);
   const [trx, setTrx] = useState('');
   const [siteCfg, setSiteCfg] = useState<Record<string, string>>({});
