@@ -81,6 +81,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const [tab, setTab] = useState<Tab>('dashboard');
   const [dark, setDark] = useState(!!initialDark);
   const [menu, setMenu] = useState(false);
+  const [acctMenu, setAcctMenu] = useState(false);
   const [accounts, setAccounts] = useState<VpnAccount[]>([]);
   const [mode, setMode] = useState<'dns' | 'vpn'>('dns');
   const [vpnForm, setVpnForm] = useState({ username: '', months: 1, bw: 'Unlimited' });
@@ -821,6 +822,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
               <button title="3. Copy DNS link (bKash)" onClick={() => makeLink(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
               <button title="4. Edit phone number" onClick={() => { setPhoneFor(a); setNewPhone('+' + a.username); }} className={`${ghost} !p-2`}><Pencil className="h-4 w-4" /></button>
               {isAdmin && <button title="Allowed phones (1-3)" onClick={() => setAllowedDevices(a)} className={`${ghost} !p-2`}><Smartphone className="h-4 w-4" /></button>}
+              {isAdmin && mode === 'dns' && <button title="Clear app / phone lock (customer can log in on a new phone)" onClick={() => { if (confirm('Clear the phone lock of ' + a.username + '? The customer can then log in on a new phone.')) dnsAction('clear', a.username); }} className={`${ghost} !p-2`}><KeyRound className="h-4 w-4" /></button>}
               {isAdmin && dnsServers.length > 1 && <button title="Move to another DNS server" onClick={() => { setMoveFor(a); setMoveTo(''); }} className={`${ghost} !p-2`}><Server className="h-4 w-4" /></button>}
               <button title="5. Renew (choose months)" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>
               <button title="Suspend" onClick={() => setStatus(a.id, 'suspended', a.username)} className={`${ghost} !p-2`}><Ban className="h-4 w-4" /></button>
@@ -931,7 +933,17 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
           <div className="ml-auto flex items-center gap-2">
             <div className={`${ghost} !py-1.5 cursor-default`}><Wallet className="h-4 w-4 text-indigo-500" />{credits} credits</div>
             <button onClick={() => setDark(!dark)} className={`${ghost} !p-2.5`} title="Theme">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
-            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center text-sm font-black">{(prof?.name || user?.email || '?').charAt(0).toUpperCase()}</div>
+            <div className="relative">
+              <button onClick={() => setAcctMenu(!acctMenu)} aria-label="Account" className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center text-sm font-black">{(prof?.name || user?.email || '?').charAt(0).toUpperCase()}</button>
+              {acctMenu && (<>
+                <div className="fixed inset-0 z-30" onClick={() => setAcctMenu(false)} />
+                <div className="absolute right-0 top-11 z-40 w-60 rounded-2xl border border-[var(--line)] bg-[var(--card)] p-2 shadow-2xl">
+                  <div className="px-3 py-2"><div className="truncate text-sm font-black">{prof?.name || 'Account'}</div><div className="truncate text-xs text-[var(--mut)]">{user?.email}</div><div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-indigo-500">{isAdmin ? 'Admin' : 'Reseller'}</div></div>
+                  <button onClick={() => { setAcctMenu(false); onStorefront(); }} className={`${btn} w-full justify-start`}><Home className="h-4 w-4" />Storefront</button>
+                  <button onClick={async () => { setAcctMenu(false); await supabase.auth.signOut(); onLogout(); }} className={`${btn} w-full justify-start text-rose-500 hover:bg-rose-500/10`}><LogOut className="h-4 w-4" />Logout</button>
+                </div>
+              </>)}
+            </div>
           </div>
         </header>
 
@@ -980,6 +992,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                         <span className="text-[var(--mut)]">Plan</span><b>{lkRes.plan || '—'}</b>
                       </div>
                       <div className="text-xs">Linked IP: <b>{lkRes.bound_ip || 'none'}</b> · Allowed phones: <b>{lkRes.max_devices}</b></div>
+                      {isAdmin && String(lkRes.service) === 'dns' && <div className="grid grid-cols-2 gap-2"><button className={ghost} onClick={() => dnsAction('clear', lkRes.username)}>Clear app / device lock</button><button className={ghost} onClick={() => dnsAction('unblock', lkRes.username)}>Unblock</button></div>}
                       {(lkRes.devices || []).length > 0 && <div className="text-xs"><div className="font-bold">Phones</div>{(lkRes.devices || []).map((d: any, i: number) => (<div key={i} className="mt-1 rounded-lg bg-[var(--card)] px-2.5 py-2"><div className="font-bold">{phoneLabel(d.ua)}</div><div className="text-[var(--mut)]">Country: <b className="text-[var(--ink)]">{d.country || 'Unknown'}</b> · IP: <b className="text-[var(--ink)]">{d.ip || '—'}</b></div><div className="text-[var(--mut)]">Last seen {d.last_seen ? new Date(d.last_seen).toLocaleString() : '—'}</div></div>))}</div>}
                       {(lkRes.log || []).length > 0 && <div className="text-xs"><div className="font-bold">Recent activity</div>{(lkRes.log || []).map((l: any, i: number) => (<div key={i} className="text-[var(--mut)] break-words">{l.at ? new Date(l.at).toLocaleString() : ''} · {({ trial: 'Trial request', activate: 'Opened on phone' } as Record<string, string>)[l.event] || l.event} · {l.ip || ''}{l.country ? ` · ${l.country}` : ''}</div>))}</div>}
                     </div>)}

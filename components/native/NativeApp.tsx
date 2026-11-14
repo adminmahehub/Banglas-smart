@@ -13,7 +13,7 @@ import { SplashScreen } from '@capacitor/splash-screen';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import {
   Briefcase, CheckCircle2, ChevronDown, Globe, Headphones, Home, LogOut, MessageCircle, Moon, MoreHorizontal,
-  RefreshCw, Settings, ShieldCheck, Sparkles, Sun, User, Zap,
+  RefreshCw, Settings, ShieldCheck, Sparkles, Sun, User, UserCircle, Zap,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { copyText, openLink } from '../../lib/nativeBridge';
@@ -123,6 +123,10 @@ export default function NativeApp() {
   const [token, setToken] = useState('');
   const [info, setInfo] = useState<Info | null>(null);
   const [loading, setLoading] = useState(false);
+  const [acct, setAcct] = useState(false);
+  const [updDismissed, setUpdDismissed] = useState(false);
+  const [appVer, setAppVer] = useState('');
+  const [staff, setStaff] = useState('');
   const [tab, setTab] = useState<Tab>('home');
   const [site, setSite] = useState<Record<string, string>>({});
   const [notices, setNotices] = useState<{ id: string; kind: string; title: string; body: string }[]>([]);
@@ -157,6 +161,12 @@ export default function NativeApp() {
   const logout = useCallback(async () => {
     setToken(''); setInfo(null); setAuto(''); setTab('home');
     try { await Preferences.remove({ key: TOKEN_KEY }); } catch { /* ignore */ }
+  }, []);
+  useEffect(() => { CapApp.getInfo().then((i) => setAppVer(i.version || '')).catch(() => {}); }, []);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setStaff(data.session?.user?.email || ''));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => setStaff(sess?.user?.email || ''));
+    return () => sub.subscription.unsubscribe();
   }, []);
   const go = useCallback((t: Tab) => { tap(); setTab(t); mainRef.current?.scrollTo({ top: 0 }); }, []);
 
@@ -536,9 +546,7 @@ export default function NativeApp() {
           </div>
         ))}
       </div>
-      <button className={`${ghost} mb-3`} onClick={() => go('admin')}><ShieldCheck className="h-4 w-4" />Admin login</button>
       <button className={`${ghost} mb-3`} onClick={() => openLink(SITE)}><Globe className="h-4 w-4" />Open website</button>
-      {logged && <button className="flex w-full items-center justify-center gap-2 py-3 text-sm text-[var(--mut)]" onClick={logout}><LogOut className="h-4 w-4" />Log out of customer account</button>}
       <p className="pb-2 text-center text-[11px] text-[var(--mut)]">MaheHub · {isIos ? 'iOS' : 'Android'} app</p>
     </div>
   );
@@ -546,7 +554,7 @@ export default function NativeApp() {
   const titles: Record<Tab, string> = { home: 'MaheHub', account: 'Account', setup: 'Setup', reseller: 'Reseller', more: 'More', admin: 'Admin' };
 
   return (
-    <div style={vars} className="flex h-[100dvh] flex-col bg-[var(--bg)] text-[var(--ink)]">
+    <div style={vars} className="relative flex h-[100dvh] flex-col bg-[var(--bg)] text-[var(--ink)]">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <header className="flex items-center justify-between px-5 pb-2" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 10px)' }}>
         <div className="flex items-center gap-3">
@@ -559,8 +567,35 @@ export default function NativeApp() {
         <div className="flex items-center gap-1">
           {logged && <button aria-label="Refresh" className="mh-press rounded-xl p-2.5 text-[var(--mut)]" onClick={() => { tap(); loadInfo(token); }}><RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} /></button>}
           <button aria-label="Theme" className="mh-press rounded-xl p-2.5 text-[var(--mut)]" onClick={() => { tap(); changeTheme(theme === 'dark' ? 'light' : 'dark'); }}>{theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}</button>
+          <button aria-label="Login and logout" className={`mh-press rounded-xl p-2.5 ${logged || staff ? 'text-indigo-500' : 'text-[var(--mut)]'}`} onClick={() => { tap(); setAcct(!acct); }}><UserCircle className="h-6 w-6" /></button>
         </div>
       </header>
+      {acct && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setAcct(false)} />
+          <div className="absolute right-4 z-50 w-64 rounded-2xl border border-[var(--line)] bg-[var(--card)] p-2 shadow-2xl" style={{ top: 'calc(env(safe-area-inset-top) + 58px)' }}>
+            <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-[var(--mut)]">Customer</div>
+            {logged
+              ? <>
+                  <div className="px-3 pb-1 text-xs text-[var(--mut)]">Logged in{info?.phone_hint ? ` •••• ${info.phone_hint}` : ''}</div>
+                  <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-rose-500 hover:bg-rose-500/10" onClick={() => { setAcct(false); logout(); }}><LogOut className="h-4 w-4" />Customer logout</button>
+                </>
+              : <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold hover:bg-[var(--soft)]" onClick={() => { setAcct(false); go('account'); }}><User className="h-4 w-4" />Customer login</button>}
+            <div className="my-1 border-t border-[var(--line)]" />
+            <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-[var(--mut)]">Reseller / Admin</div>
+            {staff
+              ? <>
+                  <div className="truncate px-3 pb-1 text-xs text-[var(--mut)]">{staff}</div>
+                  <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold hover:bg-[var(--soft)]" onClick={() => { setAcct(false); go('reseller'); }}><Briefcase className="h-4 w-4" />Open panel</button>
+                  <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-rose-500 hover:bg-rose-500/10" onClick={async () => { setAcct(false); await supabase.auth.signOut(); setTab('home'); }}><LogOut className="h-4 w-4" />Reseller / Admin logout</button>
+                </>
+              : <>
+                  <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold hover:bg-[var(--soft)]" onClick={() => { setAcct(false); go('reseller'); }}><Briefcase className="h-4 w-4" />Reseller login</button>
+                  <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold hover:bg-[var(--soft)]" onClick={() => { setAcct(false); go('admin'); }}><ShieldCheck className="h-4 w-4" />Admin login</button>
+                </>}
+          </div>
+        </>
+      )}
 
       <main ref={mainRef} className="mh-scroll flex-1 overflow-y-auto px-4 pb-8 pt-2">
         <div className={`mx-auto w-full ${tab === 'reseller' || tab === 'admin' ? 'max-w-3xl' : 'max-w-md'}`} key={tab}>
@@ -584,6 +619,24 @@ export default function NativeApp() {
         </div>
       </nav>
 
+      {(() => {
+        const latest = (site.app_latest_version || '').trim();
+        const newer = (a: string, b: string) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+        if (!latest || !appVer || updDismissed || !newer(latest, appVer)) return null;
+        return (
+          <div className="fixed inset-0 z-[70] grid place-items-center bg-black/55 p-6">
+            <div className="w-full max-w-sm rounded-3xl border border-[var(--line)] bg-[var(--card)] p-6 text-center shadow-2xl">
+              <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-indigo-500/15 text-indigo-500"><Sparkles className="h-6 w-6" /></div>
+              <div className="text-lg font-black">Update available</div>
+              <p className="mt-1 text-sm text-[var(--mut)]">A new version ({latest}) of MaheHub is ready. Please update to get the latest features.</p>
+              <div className="mt-4 grid gap-2">
+                <button className={primary} onClick={() => openLink(site.app_update_url || SITE)}>Update now</button>
+                <button className="py-2 text-sm text-[var(--mut)]" onClick={() => setUpdDismissed(true)}>Later</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {toast && <div className="pointer-events-none fixed inset-x-0 bottom-28 z-50 mx-auto w-fit rounded-full bg-black/85 px-4 py-2 text-xs font-bold text-white">{toast}</div>}
       {qr && <QrModal title={info?.phone_hint ? `•••• ${info.phone_hint}` : 'WireGuard'} text={qr} onClose={() => setQr('')} style={vars} />}
     </div>
