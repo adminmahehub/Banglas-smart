@@ -35,6 +35,8 @@ export type SiteContent = {
   theme?: ThemeCfg;
   brand?: { name?: string; tagline?: string; logo?: string };
   hero?: { bg_image?: string; video?: string; image?: string };
+  setup?: { ios_video?: string; android_video?: string };
+  popup?: { on?: boolean; title?: string; text?: string; image?: string; button_text?: string; button_url?: string };
   text?: Record<string, string>;
   order?: string[]; // ids of built-in and custom sections, top to bottom
   hidden?: string[]; // built-in sections switched off
@@ -52,6 +54,14 @@ export const TEXT_FIELDS: { key: string; group: string; label: string; def: stri
   { key: 'rates.tag', group: 'Package rates', label: 'Small tag', def: 'Expat Package Rates' },
   { key: 'rates.title', group: 'Package rates', label: 'Title', def: 'আমাদের প্রিমিয়াম প্যাকেজ রেট' },
   { key: 'setup.title', group: 'Setup guide', label: 'Title', def: '১০ সেকেন্ডে সহজ সেটআপ গাইড' },
+  { key: 'setup.ios_title', group: 'Setup guide', label: 'iPhone tab: heading', def: 'iPhone (Apple iOS 15–18+) Setup:' },
+  { key: 'setup.ios1', group: 'Setup guide', label: 'iPhone tab: step 1', def: 'Safari ব্রাউজারে Download iOS Profile বাটনে চাপ দিন এবং Allow সিলেক্ট করুন।', long: true },
+  { key: 'setup.ios2', group: 'Setup guide', label: 'iPhone tab: step 2', def: 'আইফোনের Settings ওপেন করলেই উপরে Profile Downloaded অপশন পাবেন।', long: true },
+  { key: 'setup.ios3', group: 'Setup guide', label: 'iPhone tab: step 3', def: 'উপরে ডানপাশে Install এ চাপ দিন। bKash ও Nagad ওপেন করে নিশ্চিন্তে ব্যবহার করুন!', long: true },
+  { key: 'setup.and_title', group: 'Setup guide', label: 'Android tab: heading', def: 'Android (Samsung, Xiaomi, Vivo, Oppo) Setup:' },
+  { key: 'setup.and1', group: 'Setup guide', label: 'Android tab: step 1', def: 'ফোনের Settings > Connections > More Connection Settings এ যান।', long: true },
+  { key: 'setup.and2', group: 'Setup guide', label: 'Android tab: step 2', def: 'Private DNS এ ট্যাপ করে Private DNS provider hostname সিলেক্ট করুন।', long: true },
+  { key: 'setup.and3', group: 'Setup guide', label: 'Android tab: step 3', def: 'আপনার পাওয়া হোস্টনেমটি পেস্ট করে Save করে দিন। কোনো অ্যাপের দরকার নেই!', long: true },
   { key: 'res.tag', group: 'Reseller business', label: 'Small tag', def: 'Reseller Agency Network' },
   { key: 'res.title', group: 'Reseller business', label: 'Title', def: 'রিসেলার বিজনেস শুরু করুন (MaheHub)' },
   { key: 'res.btn', group: 'Reseller business', label: 'Login button text', def: 'MaheHub Seller Login' },
@@ -100,6 +110,8 @@ export function parseContent(raw?: string | null): SiteContent {
   }
   if (j.brand && typeof j.brand === 'object') out.brand = { name: str(j.brand.name, 60), tagline: str(j.brand.tagline, 100), logo: safeUrl(j.brand.logo) || undefined };
   if (j.hero && typeof j.hero === 'object') out.hero = { bg_image: safeUrl(j.hero.bg_image) || undefined, video: safeUrl(j.hero.video) || undefined, image: safeUrl(j.hero.image) || undefined };
+  if (j.setup && typeof j.setup === 'object') out.setup = { ios_video: safeUrl(j.setup.ios_video) || undefined, android_video: safeUrl(j.setup.android_video) || undefined };
+  if (j.popup && typeof j.popup === 'object') out.popup = { on: !!j.popup.on, title: str(j.popup.title, 120), text: str(j.popup.text, 1500), image: safeUrl(j.popup.image) || undefined, button_text: str(j.popup.button_text, 40), button_url: safeUrl(j.popup.button_url) || undefined };
   if (j.text && typeof j.text === 'object') {
     out.text = {};
     for (const f of TEXT_FIELDS) { const t = str(j.text[f.key], 600); if (t !== undefined && t.trim() !== '') out.text[f.key] = t; }

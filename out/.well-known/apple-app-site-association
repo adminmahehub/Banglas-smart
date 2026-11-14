@@ -1,0 +1,5 @@
+{
+  "applinks": {
+    "details": [{ "appIDs": ["REPLACE_TEAMID.com.mahehub.app"], "components": [{ "/": "/c/*" }] }]
+  }
+}

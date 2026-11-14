@@ -158,7 +158,7 @@ export default function SiteEditor({ cls, onClose }: { cls: Cls; onClose?: () =>
 
   async function save() {
     // refuse links that the website would not show
-    for (const [label, u] of [['logo', c.brand?.logo], ['hero background', c.hero?.bg_image], ['hero video', c.hero?.video], ['hero picture', c.hero?.image]] as const) {
+    for (const [label, u] of [['logo', c.brand?.logo], ['hero background', c.hero?.bg_image], ['hero video', c.hero?.video], ['hero picture', c.hero?.image], ['iPhone video', c.setup?.ios_video], ['popup picture', c.popup?.image], ['popup button', c.popup?.button_url], ['Android video', c.setup?.android_video]] as const) {
       if (u && !safeUrl(u)) { alert(`The ${label} link must start with https://`); return; }
     }
     setBusy(true);
@@ -220,6 +220,10 @@ export default function SiteEditor({ cls, onClose }: { cls: Cls; onClose?: () =>
         <MediaField cls={cls} kind="image" label="Picture under the buttons (optional)" value={c.hero?.image} onChange={(v) => upd({ hero: { ...(c.hero || {}), image: v } })} />
         <div className="rounded-xl bg-[var(--soft)] px-3 py-2 text-xs text-[var(--mut)]">The big headline and short description are in <b>Site &amp; Notices</b>.</div>
       </>)}
+      {id === 'setup' && (<>
+        <MediaField cls={cls} kind="video" label="iPhone tab video (optional)" value={c.setup?.ios_video} onChange={(v) => upd({ setup: { ...(c.setup || {}), ios_video: v } })} hint="YouTube / Vimeo link, or upload an MP4. Shown under the iPhone steps." />
+        <MediaField cls={cls} kind="video" label="Android tab video (optional)" value={c.setup?.android_video} onChange={(v) => upd({ setup: { ...(c.setup || {}), android_video: v } })} hint="Shown under the Android steps." />
+      </>)}
       {id === 'rates' && <div className="rounded-xl bg-[var(--soft)] px-3 py-2 text-xs text-[var(--mut)]">Prices and plan names are in <b>Site &amp; Notices</b> (Customer home page).</div>}
       {TEXT_FIELDS.filter((f) => f.group === GROUP_OF[id]).map((f) => (
         <div key={f.key}>
@@ -278,6 +282,20 @@ export default function SiteEditor({ cls, onClose }: { cls: Cls; onClose?: () =>
 
   return (
     <div className="space-y-6 pb-28">
+      {/* POPUP NOTICE */}
+      <div className={`${card} p-5 space-y-3`}>
+        <div className="flex items-center justify-between gap-3"><div className="font-black">Popup notice</div>
+          <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={!!c.popup?.on} onChange={(e) => upd({ popup: { ...(c.popup || {}), on: e.target.checked } })} />Show popup</label></div>
+        <p className="text-xs text-[var(--mut)]">A poster or message that opens on top of the website and the app, with an X button. It shows once each time someone opens the app or logs in again. Normal notices stay as they are.</p>
+        <MediaField cls={cls} kind="image" label="Poster / picture (optional)" value={c.popup?.image} onChange={(v) => upd({ popup: { ...(c.popup || {}), image: v } })} />
+        <div><label className="text-xs font-bold text-[var(--mut)]">Title (optional)</label><input className={inp} value={c.popup?.title || ''} onChange={(e) => upd({ popup: { ...(c.popup || {}), title: e.target.value } })} /></div>
+        <div><label className="text-xs font-bold text-[var(--mut)]">Message (optional)</label><textarea className={`${inp} min-h-[70px]`} value={c.popup?.text || ''} onChange={(e) => upd({ popup: { ...(c.popup || {}), text: e.target.value } })} /></div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div><label className="text-xs font-bold text-[var(--mut)]">Button text (optional)</label><input className={inp} value={c.popup?.button_text || ''} onChange={(e) => upd({ popup: { ...(c.popup || {}), button_text: e.target.value } })} /></div>
+          <div><label className="text-xs font-bold text-[var(--mut)]">Button link (https://…)</label><input className={inp} value={c.popup?.button_url || ''} onChange={(e) => upd({ popup: { ...(c.popup || {}), button_url: e.target.value } })} /></div>
+        </div>
+      </div>
+
       {/* BRAND + COLOURS */}
       <div className={`${card} p-5 space-y-4`}>
         <div className="font-black">Logo and name (top bar)</div>

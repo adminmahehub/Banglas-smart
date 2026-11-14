@@ -1,0 +1,7 @@
+# MaheHub - https://smartdns.mahehub.com
+# /c/ (customer links) and /admin/ are marked "noindex" inside the pages, so search engines can read
+# the tag and drop them. They are not blocked here on purpose (a blocked page cannot show its noindex tag).
+User-agent: *
+Allow: /
+
+Sitemap: https://smartdns.mahehub.com/sitemap.xml

@@ -58,12 +58,13 @@ Deno.serve(async (req) => {
   if (!credits || credits < 10 || credits > 100000) return json({ ok: false, error: "min_10_credits" }, 400);
   const { data: prof } = await admin.from("profiles").select("id,name,role,status").eq("id", u.user.id).maybeSingle();
   if (!prof || prof.status === "banned" || prof.status === "suspended") return json({ ok: false, error: "forbidden" }, 403);
-  const { data: st } = await admin.from("app_settings").select("value").eq("key", "price_per_credit").maybeSingle();
+  const kind = body?.kind === "vpn" ? "vpn" : "dns";
+  const { data: st } = await admin.from("app_settings").select("value").eq("key", kind === "vpn" ? "vpn_price_per_credit" : "price_per_credit").maybeSingle();
   const price = Number(st?.value) || 200;
   const amount = Math.round(credits * price);
 
   const { data: order, error: oe } = await admin.from("payment_orders")
-    .insert({ owner_id: u.user.id, credits, amount_bdt: amount }).select("id").single();
+    .insert({ owner_id: u.user.id, credits, amount_bdt: amount, kind }).select("id").single();
   if (oe || !order) return json({ ok: false, error: "order_failed" }, 500);
 
   const ret = String(body?.return_url ?? "");

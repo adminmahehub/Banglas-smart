@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import NoticeCard from './NoticeCard';
 import SiteEditor from './SiteEditor';
-import { B2BAdminCard, B2BKeysCard } from './B2BRequest';
+import { B2BAdminCard, B2BKeysCard, B2BRequestForm, B2BDocs } from './B2BRequest';
 import type { VpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
 import { COUNTRIES } from '../lib/countries';
@@ -104,7 +104,10 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const [actErr, setActErr] = useState('');
   const [pName, setPName] = useState('');
   const [pWa, setPWa] = useState('');
-  const credits = Number(prof?.credits ?? 0);
+  const dnsCredits = Number(prof?.credits ?? 0);
+  const vpnCredits = Number(prof?.vpn_credits ?? 0);
+  const credits = mode === 'vpn' ? vpnCredits : dnsCredits; // balance of the panel you are in (DNS and VPN credits are separate)
+  const [ck, setCk] = useState<'dns' | 'vpn'>('dns'); // which balance Add Credit tops up
   const isAdmin = prof?.role === 'admin';
   const [q, setQ] = useState('');
   const [dq, setDq] = useState('');
@@ -138,7 +141,8 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const [topup, setTopup] = useState<number>(0);
   const [copied, setCopied] = useState('');
   const [reqs, setReqs] = useState<any[]>([]);
-  const [pay, setPay] = useState({ method: 'bKash', number: '', price: 200 });
+  const [pay, setPay] = useState({ method: 'bKash', number: '', price: 200, vpn: 200 });
+  const unit = ck === 'vpn' ? pay.vpn : pay.price;
   const [reqCredits, setReqCredits] = useState<number>(10);
   const [trx, setTrx] = useState('');
   const [siteCfg, setSiteCfg] = useState<Record<string, string>>({});
@@ -152,7 +156,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const [senderNo, setSenderNo] = useState('');
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [topBusy, setTopBusy] = useState(false);
-  const [payEdit, setPayEdit] = useState({ method: '', number: '', price: '' });
+  const [payEdit, setPayEdit] = useState({ method: '', number: '', price: '', vpn: '' });
   const [refCode, setRefCode] = useState('');
   const [inviter, setInviter] = useState('');
   const [payAccounts, setPayAccounts] = useState<any[]>([]);
@@ -261,8 +265,8 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     setSiteForm({ support_whatsapp_bd: sm.support_whatsapp_bd || '', support_whatsapp_my: sm.support_whatsapp_my || '', support_email: sm.support_email || '', facebook_url: sm.facebook_url || '', telegram_url: sm.telegram_url || '', store_headline: sm.store_headline || '', store_subline: sm.store_subline || '', store_note: sm.store_note || '', reseller_headline: sm.reseller_headline || '', reseller_subline: sm.reseller_subline || '', reseller_note: sm.reseller_note || '' });
     setPlanRows(parsePlans(sm.store_plans).map((p) => ({ label: p.label, price: p.price, note: p.note || '', hot: !!p.hot })));
     setResPlanRows(parsePlans(sm.reseller_plans).map((p) => ({ label: p.label, price: p.price, note: p.note || '', hot: !!p.hot })));
-    setPay({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: Number(sm.price_per_credit) || PER_CREDIT });
-    setPayEdit({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: String(Number(sm.price_per_credit) || PER_CREDIT) });
+    setPay({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: Number(sm.price_per_credit) || PER_CREDIT, vpn: Number(sm.vpn_price_per_credit) || Number(sm.price_per_credit) || PER_CREDIT });
+    setPayEdit({ method: sm.pay_method || 'bKash', number: sm.pay_number || '', price: String(Number(sm.price_per_credit) || PER_CREDIT), vpn: String(Number(sm.vpn_price_per_credit) || Number(sm.price_per_credit) || PER_CREDIT) });
     const pa = await supabase.from('payment_accounts').select('*').order('created_at', { ascending: true });
     setPayAccounts(pa.data || []);
     if (me?.role === 'admin') { const sv = await supabase.from('servers').select('*').order('created_at', { ascending: true }); setServers(sv.data || []); loadServerStatus(); loadDnsServers(); } else { setServers([]); setDnsServers([]); }
@@ -415,7 +419,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
       const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
       const up = await supabase.storage.from('payment-proofs').upload(path, blob, { contentType: 'image/jpeg' });
       if (up.error) { alert('Screenshot upload failed: ' + up.error.message); return; }
-      const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: acct ? `${acct.method} (${acct.kind})` : pay.method, p_coupon: cpApplied?.code || null, p_sender: sn, p_proof: path });
+      const { error } = await supabase.rpc('request_credit_topup', { p_credits: n, p_trx: trx, p_method: acct ? `${acct.method} (${acct.kind})` : pay.method, p_coupon: cpApplied?.code || null, p_sender: sn, p_proof: path, p_kind: ck });
       if (error) { alert(error.message); return; }
       alert('Submitted. Your credits will be added after the admin verifies the payment.');
       setTrx(''); setSenderNo(''); setProofFile(null); setCpIn(''); setCpApplied(null); setTopStep('amount'); load();
@@ -437,7 +441,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     if (!n || n < 10) { alert('Minimum package is 10 credits.'); return; }
     setTopBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke('piprapay-create', { body: { action: 'create', credits: n, return_url: siteOrigin() + '/reseller/' } });
+      const { data, error } = await supabase.functions.invoke('piprapay-create', { body: { action: 'create', credits: n, kind: ck, return_url: siteOrigin() + '/reseller/' } });
       let m = (data as any)?.error || '';
       if (error && !m) { try { m = (await (error as any).context?.json?.())?.error || ''; } catch { /* ignore */ } }
       if (m === 'gateway_not_configured') { alert('Online payment is not switched on yet. Please use the manual method or ask the admin.'); return; }
@@ -519,7 +523,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     if (error) alert(error.message); else load();
   }
   async function savePay() {
-    for (const [k, v] of [['pay_method', payEdit.method], ['pay_number', payEdit.number], ['price_per_credit', payEdit.price]] as const) {
+    for (const [k, v] of [['pay_method', payEdit.method], ['pay_number', payEdit.number], ['price_per_credit', payEdit.price], ['vpn_price_per_credit', payEdit.vpn]] as const) {
       const { error } = await supabase.rpc('admin_set_setting', { p_key: k, p_value: v });
       if (error) { alert(error.message); return; }
     }
@@ -744,9 +748,9 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     const n = Math.floor(Number(topup));
     if (!creditTo) { alert('Select an account first.'); return; }
     if (!n || n <= 0) { alert('Enter the number of credits (1 credit = 1 month).'); return; }
-    const payable = Math.round(n * pay.price);
-    if (!confirm(`Add ${n} credits? Payable: ৳${payable}`)) return;
-    const { error } = await supabase.rpc('admin_add_credits', { p_user: creditTo, p_credits: n, p_coupon: null });
+    const payable = Math.round(n * (ck === 'vpn' ? pay.vpn : pay.price));
+    if (!confirm(`Add ${n} ${ck.toUpperCase()} credits? Payable: ৳${payable}`)) return;
+    const { error } = await supabase.rpc('admin_add_credits', { p_user: creditTo, p_credits: n, p_coupon: null, p_kind: ck });
     if (error) alert(error.message); else { alert(`Added ${n} credits. Payable was ৳${payable}`); setTopup(0); load(); }
   }
   async function saveProfile() {
@@ -966,7 +970,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
           <button className="lg:hidden" onClick={() => setMenu(true)}><Menu className="h-6 w-6" /></button>
           <div className="text-sm text-[var(--mut)] hidden sm:block">MaheHub / {mode === 'vpn' ? 'VPN / ' : 'DNS / '}<span className="font-bold text-[var(--ink)] capitalize">{tab}</span></div>
           <div className="ml-auto flex items-center gap-2">
-            <div className={`${ghost} !py-1.5 cursor-default`}><Wallet className="h-4 w-4 text-indigo-500" />{credits} credits</div>
+            <div className={`${ghost} !py-1.5 cursor-default`}><Wallet className="h-4 w-4 text-indigo-500" />{credits} {mode === 'vpn' ? 'VPN ' : ''}credits</div>
             <button onClick={() => setDark(!dark)} className={`${ghost} !p-2.5`} title="Theme">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
             <div className="relative">
               <button onClick={() => setAcctMenu(!acctMenu)} aria-label="Account" className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-white grid place-items-center text-sm font-black">{(prof?.name || user?.email || '?').charAt(0).toUpperCase()}</button>
@@ -1048,7 +1052,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
               <Stat icon={Users} label={mode === 'vpn' ? 'VPN Accounts' : 'Total Accounts'} value={modeAccounts.length} tone="bg-indigo-500" />
               <Stat icon={Check} label="Active" value={active} tone="bg-emerald-500" />
               <Stat icon={Network} label="Total Resellers" value={resellers.length} tone="bg-violet-500" />
-              <Stat icon={Wallet} label="Credits" value={credits} tone="bg-amber-500" />
+              <Stat icon={Wallet} label={mode === 'vpn' ? 'VPN credits' : 'Credits'} value={credits} tone="bg-amber-500" />
             </div>
             {mode === 'vpn' && (() => {
               const used = modeAccounts.reduce((sum, a) => sum + a.usedMb, 0) / 1024;
@@ -1205,18 +1209,19 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
           </>)}
 
           {tab === 'credit' && (<>
+            <div className="mb-4 flex gap-2">{(['dns', 'vpn'] as const).map((k) => (<button key={k} type="button" onClick={() => setCk(k)} className={`flex-1 rounded-xl border px-3 py-2 text-sm font-black ${ck === k ? 'border-indigo-500 bg-indigo-500/10' : 'border-[var(--line)] text-[var(--mut)]'}`}>{k === 'dns' ? 'DNS credits' : 'VPN credits'} · ৳{k === 'vpn' ? pay.vpn : pay.price}</button>))}</div>
             <Head t="Add Credit" s={isAdmin ? 'Add credit to a reseller balance' : 'Buy credits and send the TrxID'} />
             {!isAdmin ? (<div className="space-y-4">
               <div className={`${card} p-6 text-sm space-y-4`}>
-                <div>Your credits: <b>{credits}</b> (1 credit = 1 month)</div>
+                <div>Your DNS credits: <b>{dnsCredits}</b> · Your VPN credits: <b>{vpnCredits}</b> (1 credit = 1 month)</div>
                 {topStep === 'amount' && <>
                   <div className="font-black text-base">Choose amount</div>
                   <div className="grid grid-cols-3 gap-2">{[10, 20, 30, 50, 100].map((v) => (
-                    <button key={v} type="button" onClick={() => setReqCredits(v)} className={`rounded-xl border px-2 py-2 text-center ${reqCredits === v ? 'border-indigo-500 bg-indigo-500/10' : 'border-[var(--line)]'}`}><div className="font-black">{v}</div><div className="text-[10px] text-[var(--mut)]">credits · ৳{v * pay.price}</div></button>))}</div>
+                    <button key={v} type="button" onClick={() => setReqCredits(v)} className={`rounded-xl border px-2 py-2 text-center ${reqCredits === v ? 'border-indigo-500 bg-indigo-500/10' : 'border-[var(--line)]'}`}><div className="font-black">{v}</div><div className="text-[10px] text-[var(--mut)]">credits · ৳{v * unit}</div></button>))}</div>
                   <input type="number" inputMode="numeric" min={10} value={reqCredits || ''} onChange={(e) => setReqCredits(Number(e.target.value))} className={inp} placeholder="Or type credits (minimum 10)" />
                   <div className="flex gap-2"><input value={cpIn} onChange={(e) => { setCpIn(e.target.value); setCpApplied(null); }} placeholder="Coupon code (optional)" className={inp} /><button type="button" className={ghost} onClick={checkCoupon}>Apply</button></div>
                   {cpApplied && <div className="text-xs font-bold text-emerald-500">Coupon {cpApplied.code}: {cpApplied.pct}% off applied</div>}
-                  <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3"><span className="text-[var(--mut)]">Total price</span><b className="text-lg">৳{Math.round(Math.max(0, Math.floor(reqCredits || 0)) * pay.price * (100 - (cpApplied?.pct || 0)) / 100)}</b></div>
+                  <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3"><span className="text-[var(--mut)]">Total price</span><b className="text-lg">৳{Math.round(Math.max(0, Math.floor(reqCredits || 0)) * unit * (100 - (cpApplied?.pct || 0)) / 100)}</b></div>
                   <button type="button" disabled={!reqCredits || reqCredits < 10 || topBusy} className={`${primary} w-full disabled:opacity-50`} onClick={payOnline}><Wallet className="h-4 w-4" />{topBusy ? 'Please wait…' : 'Pay online (bKash / Nagad / Card)'}</button>
                   <button type="button" disabled={!reqCredits || reqCredits < 10} className={`${ghost} w-full disabled:opacity-50`} onClick={() => setTopStep('method')}>Pay manually (send money + TrxID)</button>
                   <div className="text-center text-[11px] text-[var(--mut)]">Online payment adds the credits automatically within a minute. Coupons work with manual payment.</div>
@@ -1233,7 +1238,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                 </>}
                 {topStep === 'pay' && (() => {
                   const a = payAccounts.find((x) => x.id === payPick);
-                  const total = Math.round(Math.floor(reqCredits || 0) * pay.price * (100 - (cpApplied?.pct || 0)) / 100);
+                  const total = Math.round(Math.floor(reqCredits || 0) * unit * (100 - (cpApplied?.pct || 0)) / 100);
                   return <>
                     <div className="text-center font-black text-base">{a?.method} · {a?.kind}</div>
                     <div className="space-y-2 rounded-xl bg-[var(--soft)] px-4 py-3 text-xs">
@@ -1275,6 +1280,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                 <button type="button" className={`${primary} w-full`} onClick={savePayAccount}>{paForm.id ? 'Update account' : 'Add account'}</button>
                 <div className="text-xs font-bold text-[var(--mut)] pt-2">Credit rate</div>
                 <input className={inp} inputMode="numeric" value={payEdit.price} onChange={(e) => setPayEdit({ ...payEdit, price: e.target.value.replace(/\D/g, '') })} placeholder="Price per credit (BDT)" />
+                <input className={inp} inputMode="numeric" value={payEdit.vpn} onChange={(e) => setPayEdit({ ...payEdit, vpn: e.target.value.replace(/\D/g, '') })} placeholder="VPN price per credit (BDT)" />
                 <button type="button" className={`${primary} w-full`} onClick={savePay}>Save credit rate</button>
               </div>
               {reqs.some((r) => r.status === 'pending') && <div className={`${card} p-5 mb-6`}>
@@ -1286,12 +1292,12 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                     <div className="flex gap-2"><button type="button" className={`${primary} !py-1.5 text-xs`} onClick={() => resolveReq(r.id, true)}>Approve</button>{r.proof_path && <button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => viewProof(r.proof_path)}>View screenshot</button>}<button type="button" className={`${ghost} !py-1.5 text-xs`} onClick={() => resolveReq(r.id, false)}>Reject</button></div>
                   </div>))}
               </div>}
-              <select className={`${inp} mb-4`} value={creditTo} onChange={(e) => setCreditTo(e.target.value)}><option value="">Select reseller</option>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (my account)' }] : []), ...resellers].map((r: any) => <option key={r.id} value={r.id}>{r.name} ({r.credits ?? 0} credits)</option>)}</select>
+              <select className={`${inp} mb-4`} value={creditTo} onChange={(e) => setCreditTo(e.target.value)}><option value="">Select reseller</option>{[...(prof ? [{ ...prof, name: (prof.name || 'Me') + ' (my account)' }] : []), ...resellers].map((r: any) => <option key={r.id} value={r.id}>{r.name} (DNS {r.credits ?? 0} · VPN {r.vpn_credits ?? 0})</option>)}</select>
               <label className="text-xs font-bold text-[var(--mut)]">Credits to add (1 credit = 1 month)</label>
               <input type="number" inputMode="numeric" min={1} placeholder="Type credits, e.g. 10" value={topup || ''} onChange={(e) => setTopup(Number(e.target.value))} className={`${inp} mb-3`} />
               <div className="flex flex-wrap gap-2 mb-4">{[10, 20, 50, 100].map((v) => (
                 <button key={v} type="button" onClick={() => setTopup(v)} className={`${ghost} !px-3 !py-1.5 text-xs`}>{v}</button>))}</div>
-              <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">Payable (10 credits = ৳{pay.price * 10})</span><b className="text-lg">৳{Math.round((topup || 0) * pay.price)}</b></div>
+              <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3 text-sm"><span className="text-[var(--mut)]">Payable (10 credits = ৳{unit * 10})</span><b className="text-lg">৳{Math.round((topup || 0) * unit)}</b></div>
               <button disabled={!creditTo || !topup} className={`${primary} mt-5 disabled:opacity-50`} onClick={addCredit}><Wallet className="h-4 w-4" />Add {topup || 0} Credits</button>
               <div className={`${card} p-5 mt-8 space-y-3`}>
                 <div className="font-black">Coupon codes</div>
@@ -1398,11 +1404,15 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
             </div>
           </>)}
 
-          {tab === 'api' && (<><Head t="API" s="Reseller API (design preview)" />
-            <div className={`${card} p-5 mb-4`}><div className="text-xs font-bold text-[var(--mut)] mb-2">API KEY</div>
-              <div className="flex gap-2"><input readOnly value="demo-key-xxxx-xxxx-xxxx" className={inp} /><button className={ghost} onClick={() => flash('k', 'demo-key-xxxx-xxxx-xxxx')}>{copied === 'k' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div></div>
-            <div className={`${card} divide-y divide-[var(--line)] font-mono text-xs`}>{['POST /v1/vpn/provision', 'POST /v1/vpn/renew', 'POST /v1/vpn/suspend', 'GET  /v1/vpn/usage'].map((e) => <div key={e} className="px-5 py-3.5">{e}</div>)}</div>
-            <p className="mt-3 text-xs text-[var(--mut)]">These endpoints are design-only for now and will be built once the server is connected.</p></>)}
+          {tab === 'api' && (<><Head t="API" s="Connect your own website or bot to MaheHub" />
+            <div className={`${card} p-5 mb-4 text-sm space-y-2`}>
+              <div className="font-black">How it works</div>
+              <p className="text-[var(--mut)]">The API lets your own system create DNS customers and check their status automatically. Each key is issued by the admin after a partnership request, and it is linked to your credits (1 credit = 1 month). The key is shown once when it is created.</p>
+              <p className="text-[var(--mut)]">No key yet? Send a request below. The admin will review it and send you the key.</p>
+            </div>
+            {isAdmin && <div className="mb-4"><B2BKeysCard cls={{ card, primary, ghost }} /></div>}
+            <div className="mb-4"><B2BRequestForm dark={dark} waNumber={String(siteForm?.support_whatsapp_bd || '')} /></div>
+            <B2BDocs dark={dark} /></>)}
 
           {tab === 'profile' && (<><Head t="User Profile" s={user?.email} />
             <div className={`${card} p-6 max-w-lg space-y-3`}>
@@ -1476,9 +1486,9 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                   {actInfo.status === 'pending' && <option value={0}>Free trial · 1 hour (0 credit)</option>}
                   {[1, 2, 3, 6, 12].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''} ({isAdmin ? 'free for admin' : `${m} credit${m > 1 ? 's' : ''}`})</option>)}
                 </select>
-                {!isAdmin && actMonths > 0 && <div className="text-xs text-[var(--mut)]">Your credits: {credits}{credits < actMonths ? ' — not enough for this plan' : ''}</div>}
+                {!isAdmin && actMonths > 0 && <div className="text-xs text-[var(--mut)]">Your credits: {dnsCredits}{dnsCredits < actMonths ? ' — not enough for this plan' : ''}</div>}
                 {actMonths === 0 && <div className="text-xs text-[var(--mut)]">The customer becomes yours. No credit is used.</div>}
-                <button disabled={actBusy || (!isAdmin && actMonths > 0 && credits < actMonths)} className={`${primary} w-full disabled:opacity-50`} onClick={activateCustomer}>{actBusy ? 'Please wait…' : actMonths === 0 ? 'Approve free trial' : 'Activate customer'}</button>
+                <button disabled={actBusy || (!isAdmin && actMonths > 0 && dnsCredits < actMonths)} className={`${primary} w-full disabled:opacity-50`} onClick={activateCustomer}>{actBusy ? 'Please wait…' : actMonths === 0 ? 'Approve free trial' : 'Activate customer'}</button>
               </div>
             )}
             {actErr && <div className="mt-3 text-xs font-bold text-rose-500">{actErr}</div>}

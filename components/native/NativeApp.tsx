@@ -23,6 +23,7 @@ import ResellerPanel from '../ResellerPanel';
 import NoticeCard from '../NoticeCard';
 import TrialPending from '../TrialPending';
 import { CustomBlock } from '../SiteBlocks';
+import PopupNotice from '../PopupNotice';
 import { parseContent, orderedIds } from '../../lib/siteContent';
 
 const FN = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ssaqdsqopxclkplstpzj.supabase.co') + '/functions/v1';
@@ -127,6 +128,7 @@ export default function NativeApp() {
   const [loading, setLoading] = useState(false);
   const [acct, setAcct] = useState(false);
   const [updDismissed, setUpdDismissed] = useState(false);
+  const [popupDone, setPopupDone] = useState(false);
   const [appVer, setAppVer] = useState('');
   const [staff, setStaff] = useState('');
   const [tab, setTab] = useState<Tab>('home');
@@ -161,7 +163,7 @@ export default function NativeApp() {
     try { await Preferences.set({ key: TOKEN_KEY, value: t }); } catch { /* ignore */ }
   }, []);
   const logout = useCallback(async () => {
-    setToken(''); setInfo(null); setAuto(''); setTab('home');
+    setToken(''); setInfo(null); setAuto(''); setTab('home'); setPopupDone(false);
     try { await Preferences.remove({ key: TOKEN_KEY }); } catch { /* ignore */ }
   }, []);
   useEffect(() => { CapApp.getInfo().then((i) => setAppVer(i.version || '')).catch(() => {}); }, []);
@@ -630,6 +632,7 @@ export default function NativeApp() {
         </div>
       </nav>
 
+      {!popupDone && <PopupNotice popup={parseContent(site.site_content).popup} dark={theme === 'dark'} onClose={() => setPopupDone(true)} onLink={(u) => openLink(u)} />}
       {(() => {
         const latest = (site.app_latest_version || '').trim();
         const newer = (a: string, b: string) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };

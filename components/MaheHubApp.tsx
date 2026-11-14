@@ -14,8 +14,9 @@ import {
 } from '../lib/suauthData';
 import ResellerPanel from './ResellerPanel';
 import { CustomerAccess, parsePlans, cleanPhone } from './Storefront';
-import { CustomBlock } from './SiteBlocks';
+import { CustomBlock, MediaView } from './SiteBlocks';
 import { B2BRequestForm, B2BDocs } from './B2BRequest';
+import PopupNotice from './PopupNotice';
 import { parseContent, orderedIds, tx, themeCss, embedFor, DEFAULT_BRAND } from '../lib/siteContent';
 import { supabase } from '../lib/supabase';
 import NoticeCard from './NoticeCard';
@@ -284,6 +285,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
     return () => clearTimeout(h);
   }, [homeToken]);
   const [activeSetupTab, setActiveSetupTab] = useState<'iphone' | 'android'>('iphone');
+  const [popupDone, setPopupDone] = useState(false);
   const [resellerSalesSlider, setResellerSalesSlider] = useState<number>(50);
   const [site, setSite] = useState<Record<string, string>>({});
   const sc = useMemo(() => parseContent(site.site_content), [site.site_content]);
@@ -831,6 +833,7 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
       theme === 'dark' ? 'bg-[#070b18] text-slate-100 selection:bg-cyan-500 selection:text-black' : 'bg-slate-100 text-slate-900 selection:bg-cyan-400 selection:text-slate-900'
     }`}>
       {themeStyle && <style dangerouslySetInnerHTML={{ __html: themeStyle }} />}
+      {!popupDone && <PopupNotice popup={sc.popup} dark={theme === 'dark'} onClose={() => setPopupDone(true)} />}
       
       {/* Floating In-App Toast Notification */}
       {toastMessage && (
@@ -1539,22 +1542,23 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 <div className="space-y-4">
                   <h4 className="font-bold text-white text-base flex items-center gap-2">
                     <Apple className="h-5 w-5 text-cyan-400" />
-                    iPhone (Apple iOS 15–18+) Setup:
+                    {tx(sc, 'setup.ios_title', 'iPhone (Apple iOS 15–18+) Setup:')}
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-slate-300">
                     <div className="p-4 rounded-2xl bg-[#141e3d] border border-slate-800 space-y-1">
                       <span className="font-mono font-bold text-cyan-400">ধাপ ১:</span>
-                      <p>Safari ব্রাউজারে <strong>Download iOS Profile</strong> বাটনে চাপ দিন এবং <strong>Allow</strong> সিলেক্ট করুন।</p>
+                      <p>{sc.text?.['setup.ios1'] ? sc.text['setup.ios1'] : (<>Safari ব্রাউজারে <strong>Download iOS Profile</strong> বাটনে চাপ দিন এবং <strong>Allow</strong> সিলেক্ট করুন।</>)}</p>
                     </div>
                     <div className="p-4 rounded-2xl bg-[#141e3d] border border-slate-800 space-y-1">
                       <span className="font-mono font-bold text-cyan-400">ধাপ ২:</span>
-                      <p>আইফোনের <strong>Settings</strong> ওপেন করলেই উপরে <strong>Profile Downloaded</strong> অপশন পাবেন।</p>
+                      <p>{sc.text?.['setup.ios2'] ? sc.text['setup.ios2'] : (<>আইফোনের <strong>Settings</strong> ওপেন করলেই উপরে <strong>Profile Downloaded</strong> অপশন পাবেন।</>)}</p>
                     </div>
                     <div className="p-4 rounded-2xl bg-[#141e3d] border border-slate-800 space-y-1">
                       <span className="font-mono font-bold text-cyan-400">ধাপ ৩:</span>
-                      <p>উপরে ডানপাশে <strong>Install</strong> এ চাপ দিন। bKash ও Nagad ওপেন করে নিশ্চিন্তে ব্যবহার করুন!</p>
+                      <p>{sc.text?.['setup.ios3'] ? sc.text['setup.ios3'] : (<>উপরে ডানপাশে <strong>Install</strong> এ চাপ দিন। bKash ও Nagad ওপেন করে নিশ্চিন্তে ব্যবহার করুন!</>)}</p>
                     </div>
                   </div>
+                  {sc.setup?.ios_video && <MediaView item={{ kind: 'video', url: sc.setup.ios_video }} />}
                 </div>
               )}
 
@@ -1562,22 +1566,23 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 <div className="space-y-4">
                   <h4 className="font-bold text-white text-base flex items-center gap-2">
                     <Smartphone className="h-5 w-5 text-emerald-400" />
-                    Android (Samsung, Xiaomi, Vivo, Oppo) Setup:
+                    {tx(sc, 'setup.and_title', 'Android (Samsung, Xiaomi, Vivo, Oppo) Setup:')}
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-slate-300">
                     <div className="p-4 rounded-2xl bg-[#141e3d] border border-slate-800 space-y-1">
                       <span className="font-mono font-bold text-emerald-400">ধাপ ১:</span>
-                      <p>ফোনের <strong>Settings &gt; Connections &gt; More Connection Settings</strong> এ যান।</p>
+                      <p>{sc.text?.['setup.and1'] ? sc.text['setup.and1'] : (<>ফোনের <strong>Settings &gt; Connections &gt; More Connection Settings</strong> এ যান।</>)}</p>
                     </div>
                     <div className="p-4 rounded-2xl bg-[#141e3d] border border-slate-800 space-y-1">
                       <span className="font-mono font-bold text-emerald-400">ধাপ ২:</span>
-                      <p><strong>Private DNS</strong> এ ট্যাপ করে <strong>Private DNS provider hostname</strong> সিলেক্ট করুন।</p>
+                      <p>{sc.text?.['setup.and2'] ? sc.text['setup.and2'] : (<><strong>Private DNS</strong> এ ট্যাপ করে <strong>Private DNS provider hostname</strong> সিলেক্ট করুন।</>)}</p>
                     </div>
                     <div className="p-4 rounded-2xl bg-[#141e3d] border border-slate-800 space-y-1">
                       <span className="font-mono font-bold text-emerald-400">ধাপ ৩:</span>
-                      <p>আপনার পাওয়া হোস্টনেমটি পেস্ট করে <strong>Save</strong> করে দিন। কোনো অ্যাপের দরকার নেই!</p>
+                      <p>{sc.text?.['setup.and3'] ? sc.text['setup.and3'] : (<>আপনার পাওয়া হোস্টনেমটি পেস্ট করে <strong>Save</strong> করে দিন। কোনো অ্যাপের দরকার নেই!</>)}</p>
                     </div>
                   </div>
+                  {sc.setup?.android_video && <MediaView item={{ kind: 'video', url: sc.setup.android_video }} />}
                 </div>
               )}
             </div>
