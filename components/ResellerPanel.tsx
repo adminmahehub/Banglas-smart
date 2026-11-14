@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import NoticeCard from './NoticeCard';
 import SiteEditor from './SiteEditor';
+import { B2BAdminCard } from './B2BRequest';
 import type { VpnAccount } from '../lib/suauthData';
 import { supabase } from '../lib/supabase';
 import { COUNTRIES } from '../lib/countries';
@@ -419,6 +420,40 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
       alert('Submitted. Your credits will be added after the admin verifies the payment.');
       setTrx(''); setSenderNo(''); setProofFile(null); setCpIn(''); setCpApplied(null); setTopStep('amount'); load();
     } catch (e: any) { alert(e?.message || 'Something went wrong'); } finally { setTopBusy(false); }
+  }
+  useEffect(() => {
+    if (!user?.id || isAdmin) return;
+    let order = '';
+    try { order = new URLSearchParams(window.location.search).get('pay') || ''; } catch { /* ignore */ }
+    if (!order) { try { order = sessionStorage.getItem('mh_pay_order') || ''; } catch { /* ignore */ } }
+    if (!/^[0-9a-f-]{36}$/i.test(order)) return;
+    try { sessionStorage.removeItem('mh_pay_order'); } catch { /* ignore */ }
+    setTab('credit');
+    checkOnlinePayment(order);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+  async function payOnline() {
+    const n = Math.floor(Number(reqCredits));
+    if (!n || n < 10) { alert('Minimum package is 10 credits.'); return; }
+    setTopBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('piprapay-create', { body: { action: 'create', credits: n, return_url: siteOrigin() + '/reseller/' } });
+      let m = (data as any)?.error || '';
+      if (error && !m) { try { m = (await (error as any).context?.json?.())?.error || ''; } catch { /* ignore */ } }
+      if (m === 'gateway_not_configured') { alert('Online payment is not switched on yet. Please use the manual method or ask the admin.'); return; }
+      if (error || !(data as any)?.url) { alert('Could not start the payment' + (m ? ': ' + m : '.')); return; }
+      const url = String((data as any).url);
+      if (typeof window !== 'undefined' && !/^https:\/\//.test(url)) { alert('Invalid payment link.'); return; }
+      try { sessionStorage.setItem('mh_pay_order', String((data as any).order || '')); } catch { /* ignore */ }
+      if (process.env.NEXT_PUBLIC_APP_MODE === 'native') openLink(url); else window.location.href = url;
+    } catch (e: any) { alert(e?.message || 'Something went wrong'); } finally { setTopBusy(false); }
+  }
+  async function checkOnlinePayment(order: string, silent?: boolean) {
+    const { data, error } = await supabase.functions.invoke('piprapay-create', { body: { action: 'check', order } });
+    const st = (data as any)?.status;
+    if (!silent) alert(error ? 'Could not check the payment.' : st === 'paid' ? 'Payment received. Your credits were added.' : 'Payment not confirmed yet. If you already paid, wait a minute and press Refresh.');
+    if (st === 'paid') load();
+    return st;
   }
   async function viewProof(path: string) {
     const { data, error } = await supabase.storage.from('payment-proofs').createSignedUrl(path, 300);
@@ -949,6 +984,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
 
         <div className="p-4 sm:p-8 max-w-6xl mx-auto">
           {tab === 'dashboard' && (<>
+            {isAdmin && <B2BAdminCard cls={{ card, primary, ghost }} />}
             {isAdmin && pendTrials.length > 0 && (
               <div className={`${card} p-4 mb-5 border-amber-500/40`}>
                 <div className="mb-2 text-sm font-black text-amber-500">Pending free trials ({pendTrials.length})</div>
@@ -1180,7 +1216,9 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
                   <div className="flex gap-2"><input value={cpIn} onChange={(e) => { setCpIn(e.target.value); setCpApplied(null); }} placeholder="Coupon code (optional)" className={inp} /><button type="button" className={ghost} onClick={checkCoupon}>Apply</button></div>
                   {cpApplied && <div className="text-xs font-bold text-emerald-500">Coupon {cpApplied.code}: {cpApplied.pct}% off applied</div>}
                   <div className="flex items-center justify-between rounded-xl bg-[var(--soft)] px-4 py-3"><span className="text-[var(--mut)]">Total price</span><b className="text-lg">৳{Math.round(Math.max(0, Math.floor(reqCredits || 0)) * pay.price * (100 - (cpApplied?.pct || 0)) / 100)}</b></div>
-                  <button type="button" disabled={!reqCredits || reqCredits < 10} className={`${primary} w-full disabled:opacity-50`} onClick={() => setTopStep('method')}><Wallet className="h-4 w-4" />Recharge</button>
+                  <button type="button" disabled={!reqCredits || reqCredits < 10 || topBusy} className={`${primary} w-full disabled:opacity-50`} onClick={payOnline}><Wallet className="h-4 w-4" />{topBusy ? 'Please wait…' : 'Pay online (bKash / Nagad / Card)'}</button>
+                  <button type="button" disabled={!reqCredits || reqCredits < 10} className={`${ghost} w-full disabled:opacity-50`} onClick={() => setTopStep('method')}>Pay manually (send money + TrxID)</button>
+                  <div className="text-center text-[11px] text-[var(--mut)]">Online payment adds the credits automatically within a minute. Coupons work with manual payment.</div>
                 </>}
                 {topStep === 'method' && <>
                   <div className="text-center"><div className="font-black text-base">Choose payment method</div><div className="mt-1 inline-block rounded-full bg-indigo-500/10 px-4 py-1 font-black text-indigo-500">{Math.floor(reqCredits)} credits · ৳{Math.round(Math.floor(reqCredits || 0) * pay.price * (100 - (cpApplied?.pct || 0)) / 100)}</div></div>

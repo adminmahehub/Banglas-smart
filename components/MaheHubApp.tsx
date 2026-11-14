@@ -15,6 +15,7 @@ import {
 import ResellerPanel from './ResellerPanel';
 import { CustomerAccess, parsePlans, cleanPhone } from './Storefront';
 import { CustomBlock } from './SiteBlocks';
+import { B2BRequestForm } from './B2BRequest';
 import { parseContent, orderedIds, tx, themeCss, embedFor, DEFAULT_BRAND } from '../lib/siteContent';
 import { supabase } from '../lib/supabase';
 import NoticeCard from './NoticeCard';
@@ -986,6 +987,19 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                 <span>🇲🇾 +{waMy}</span>
               </a>
 
+              {/^https?:\/\//i.test(site.app_update_url || '') && (
+                <a
+                  href={site.app_update_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-2.5 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-500 hover:text-white font-bold text-[11px] transition-all flex items-center gap-1.5 shadow-sm"
+                  title="Download the MaheHub app"
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  <span>Get the App</span>
+                </a>
+              )}
+
               <a
                 href={`mailto:${supportEmail}`}
                 className="px-2.5 py-1.5 rounded-lg border border-purple-500/30 bg-purple-600/10 hover:bg-purple-600 text-purple-500 hover:text-white font-bold text-[11px] transition-all flex items-center gap-1.5 shadow-sm"
@@ -1682,6 +1696,8 @@ export default function MaheHubEnterpriseSystem({ initialView = 'store' }: { ini
                   </a>
                 </div>
               </div>
+
+              <B2BRequestForm dark={theme === 'dark'} waNumber={waBd} />
 
               {/* 3 Pillars */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">

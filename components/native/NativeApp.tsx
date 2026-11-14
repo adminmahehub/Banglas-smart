@@ -22,6 +22,8 @@ import QrModal from '../QrModal';
 import ResellerPanel from '../ResellerPanel';
 import NoticeCard from '../NoticeCard';
 import TrialPending from '../TrialPending';
+import { CustomBlock } from '../SiteBlocks';
+import { parseContent, orderedIds } from '../../lib/siteContent';
 
 const FN = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ssaqdsqopxclkplstpzj.supabase.co') + '/functions/v1';
 const BASE = FN + '/dns-portal';
@@ -345,6 +347,15 @@ export default function NativeApp() {
       </div>
 
       <div className="mb-3 space-y-3">{notices.slice(0, 2).map((n) => (<NoticeCard key={n.id} kind={n.kind} title={n.title} body={n.body} />))}</div>
+
+      {(() => {
+        // sections (text, images, videos, galleries, offers) made by the admin in the Website Editor show here too
+        const sc = parseContent(site.site_content);
+        const ids = orderedIds(sc);
+        const blocks = (sc.custom || []).filter((c) => ids.includes(c.id));
+        if (!blocks.length) return null;
+        return <div className="mb-4 space-y-6 [&_section]:!px-0">{blocks.map((c) => (<CustomBlock key={c.id} c={c} dark={theme === 'dark'} />))}</div>;
+      })()}
 
       <div className={card}>
         <div className="mb-3 text-sm font-black">Works with</div>
