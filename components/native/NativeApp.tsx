@@ -2,7 +2,9 @@
 // MaheHub native app (Android + iOS via Capacitor). Used only when built with NEXT_PUBLIC_APP_MODE=native (see app/page.tsx).
 // Tabs: Home (everything from the website storefront) · Account (customer login + status) · Setup · Reseller (full reseller panel) · More.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const MaheNative: any = registerPlugin('MaheNative');
 import { App as CapApp } from '@capacitor/app';
 import { Device } from '@capacitor/device';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
@@ -261,6 +263,34 @@ export default function NativeApp() {
       if (!/cancel/i.test(String(e?.message || ''))) setWgMsg('Could not share the file. Use "Show QR code" instead.');
     }
   }
+  // Save the .conf with the Android "Save as" picker (works with any file manager)
+  async function wgSave() {
+    setWgBusy('save'); const t = await wgConf(); setWgBusy('');
+    if (!t) return;
+    const name = `${wgFileName()}.conf`;
+    try {
+      await MaheNative.saveFile({ name, text: t });
+      setWgMsg(`Saved ${name}. Now open WireGuard → + → Import from file or archive → pick ${name}.`);
+    } catch (e: any) {
+      const m = String(e?.message || e?.code || '');
+      if (/cancel/i.test(m)) return;
+      setWgMsg('Could not save here on this phone. Use "Send to WireGuard" or "Show QR code".');
+    }
+  }
+  // Send the .conf straight into the WireGuard app
+  async function wgDirect() {
+    setWgBusy('direct'); const t = await wgConf(); setWgBusy('');
+    if (!t) return;
+    const name = `${wgFileName()}.conf`;
+    try {
+      await MaheNative.openInWireGuard({ name, text: t });
+      setWgMsg('WireGuard opened. Confirm the import there.');
+    } catch (e: any) {
+      const m = String(e?.message || e?.code || '');
+      if (/not_installed/i.test(m)) setWgMsg('WireGuard is not installed. Install it from the Play Store first, then try again.');
+      else await wgShare();
+    }
+  }
   async function wgQr() { setWgBusy('qr'); const t = await wgConf(); setWgBusy(''); if (t) setQr(t); }
 
   const waBd = site.support_whatsapp_bd || '8801614082537';
@@ -506,7 +536,8 @@ export default function NativeApp() {
             <p className="mb-3 text-xs text-[var(--mut)]">Keep this config private. It works on one phone only.</p>
             <div className="space-y-2">
               <button className={ghost} onClick={() => openLink(isIos ? 'https://apps.apple.com/app/wireguard/id1441195209' : 'https://play.google.com/store/apps/details?id=com.wireguard.android')}>1. Get the WireGuard app ({isIos ? 'App Store' : 'Play Store'})</button>
-              <button className={primary} disabled={!!wgBusy} onClick={wgShare}>{wgBusy === 'share' ? 'Please wait…' : 'Send to WireGuard'}</button>
+              <button className={primary} disabled={!!wgBusy} onClick={Capacitor.getPlatform() === 'android' ? wgDirect : wgShare}>{wgBusy === 'direct' || wgBusy === 'share' ? 'Please wait…' : 'Open in WireGuard'}</button>
+              {Capacitor.getPlatform() === 'android' && <button className={ghost} disabled={!!wgBusy} onClick={wgSave}>{wgBusy === 'save' ? 'Please wait…' : 'Save file to phone'}</button>}
               <button className={ghost} disabled={!!wgBusy} onClick={wgQr}>{wgBusy === 'qr' ? 'Please wait…' : 'Show QR code'}</button>
             </div>
             {wgMsg && <div className="mt-3 text-center text-xs text-amber-500">{wgMsg}</div>}
