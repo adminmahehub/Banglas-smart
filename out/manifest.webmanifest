@@ -1,0 +1,14 @@
+{
+  "name": "MaheHub Smart DNS",
+  "short_name": "MaheHub",
+  "description": "Smart DNS for bKash, Nagad, Rocket and Upay from abroad",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070b18",
+  "theme_color": "#070b18",
+  "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

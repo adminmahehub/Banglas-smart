@@ -11,6 +11,8 @@ export const metadata: Metadata = {
   title: { default: TITLE, template: '%s | MaheHub' },
   description: DESC,
   applicationName: 'MaheHub',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: { capable: true, title: 'MaheHub', statusBarStyle: 'black-translucent' },
   keywords: [
     'Smart DNS Bangladesh', 'bKash abroad', 'Nagad abroad', 'Rocket Upay abroad',
     'Bangladesh VPN', 'Bangladeshi apps from abroad', 'MaheHub', 'DNS reseller',
