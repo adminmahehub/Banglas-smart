@@ -286,9 +286,13 @@ export default function NativeApp() {
       await MaheNative.openInWireGuard({ name, text: t });
       setWgMsg('WireGuard opened. Confirm the import there.');
     } catch (e: any) {
-      const m = String(e?.message || e?.code || '');
-      if (/not_installed/i.test(m)) setWgMsg('WireGuard is not installed. Install it from the Play Store first, then try again.');
-      else await wgShare();
+      // WireGuard did not take the file directly: save it with the Android "Save as" window instead
+      try {
+        await MaheNative.saveFile({ name, text: t });
+        setWgMsg(`Saved ${name}. Now open WireGuard → + → Import from file or archive → pick ${name}. (If WireGuard is not installed, install it from the Play Store first.)`);
+      } catch (e2: any) {
+        if (!/cancel/i.test(String(e2?.message || e2?.code || ''))) setWgMsg('Could not save the file. Use "Show QR code" in WireGuard (+ → Scan from QR code).');
+      }
     }
   }
   async function wgQr() { setWgBusy('qr'); const t = await wgConf(); setWgBusy(''); if (t) setQr(t); }
