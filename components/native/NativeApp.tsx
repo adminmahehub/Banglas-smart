@@ -269,12 +269,17 @@ export default function NativeApp() {
     if (!t) return;
     const name = `${wgFileName()}.conf`;
     try {
+      await MaheNative.saveToDownloads({ name, text: t });
+      setWgMsg(`Saved in your Downloads folder as ${name}. Now open WireGuard → + → Import from file or archive → Downloads → ${name}.`);
+      return;
+    } catch { /* older Android or blocked: use the Save-as window */ }
+    try {
       await MaheNative.saveFile({ name, text: t });
       setWgMsg(`Saved ${name}. Now open WireGuard → + → Import from file or archive → pick ${name}.`);
     } catch (e: any) {
       const m = String(e?.message || e?.code || '');
       if (/cancel/i.test(m)) return;
-      setWgMsg('Could not save here on this phone. Use "Send to WireGuard" or "Show QR code".');
+      setWgMsg('Could not save here on this phone. Use "Open in WireGuard" or "Show QR code".');
     }
   }
   // Send the .conf straight into the WireGuard app

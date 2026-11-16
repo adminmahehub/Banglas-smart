@@ -27,6 +27,9 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
 import androidx.activity.result.ActivityResult;
+import android.content.ContentValues;
+import android.os.Build;
+import android.provider.MediaStore;
 import androidx.core.content.FileProvider;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -41,6 +44,30 @@ import java.nio.charset.StandardCharsets;
 
 @CapacitorPlugin(name = "MaheNative")
 public class MaheNativePlugin extends Plugin {
+
+    // Saves straight into the phone's Downloads folder (no permission needed on Android 10+).
+    @PluginMethod
+    public void saveToDownloads(PluginCall call) {
+        String name = call.getString("name", "mahehub.conf");
+        String text = call.getString("text", "");
+        if (text == null || text.isEmpty()) { call.reject("empty"); return; }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) { call.reject("old_android"); return; }
+        try {
+            ContentValues v = new ContentValues();
+            v.put(MediaStore.Downloads.DISPLAY_NAME, name);
+            v.put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream");
+            v.put(MediaStore.Downloads.RELATIVE_PATH, "Download");
+            Uri uri = getContext().getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+            if (uri == null) { call.reject("write_failed"); return; }
+            OutputStream os = getContext().getContentResolver().openOutputStream(uri, "wt");
+            if (os == null) { call.reject("write_failed"); return; }
+            os.write(text.getBytes(StandardCharsets.UTF_8));
+            os.close();
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("write_failed");
+        }
+    }
 
     // Opens the Android "Save as" file picker (Storage Access Framework) and writes the text there.
     @PluginMethod
