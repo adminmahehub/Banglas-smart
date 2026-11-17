@@ -501,6 +501,7 @@ export default function NativeApp() {
               <button className={`${primary} mt-3`} onClick={() => wa(waBd, `Hello, I want to renew.${idTxt}`)}><MessageCircle className="h-4 w-4" />Renew on WhatsApp</button></div>
           )}
           <button className="flex w-full items-center justify-center gap-2 py-3 text-sm text-[var(--mut)]" onClick={logout}><LogOut className="h-4 w-4" />Log out</button>
+          <div className="pb-2 text-center text-[10px] text-[var(--mut)]">App build 17-Nov-2026 · WireGuard save v3</div>
         </>
       )}
     </div>
