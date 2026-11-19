@@ -120,7 +120,7 @@ export function B2BKeysCard({ cls }: { cls: { card: string; primary: string; gho
           <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--soft)] px-3 py-2 text-sm">
             <div className="min-w-0 flex-1"><div className="truncate font-black">{r.name || 'Reseller'}</div><div className="text-xs text-[var(--mut)]">{r.credits} credits{k ? ` · key ${k.prefix}… ${k.active ? 'active' : 'revoked'}${k.last_used_at ? ' · used ' + new Date(k.last_used_at).toLocaleDateString() : ''}` : ' · no API key'}</div></div>
             <button className={`${cls.primary} !px-3 !py-1.5 text-xs`} onClick={() => gen(r)}>{k ? 'New key' : 'Create key'}</button>
-            {k?.active && <button className={`${cls.ghost} !px-3 !py-1.5 text-xs`} onClick={() => revoke(r)}>Revoke</button>}
+            <button disabled={!k?.active} className={`${cls.ghost} !px-3 !py-1.5 text-xs !text-rose-500 disabled:opacity-40`} onClick={() => revoke(r)}>{k && !k.active ? 'Revoked' : 'Revoke'}</button>
           </div>); })}
         {resellers.length === 0 && <div className="text-xs text-[var(--mut)]">No resellers yet.</div>}
       </div>

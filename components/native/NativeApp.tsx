@@ -14,8 +14,8 @@ import { Share } from '@capacitor/share';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import {
-  Briefcase, CheckCircle2, ChevronDown, Globe, Headphones, Home, LogOut, MessageCircle, Moon, MoreHorizontal,
-  RefreshCw, Settings, ShieldCheck, Sparkles, Sun, User, UserCircle, Zap,
+  Briefcase, CheckCircle2, ChevronDown, ChevronRight, Facebook, FileText, Globe, Headphones, Home, LogOut, Mail, Menu, MessageCircle, Moon, MoreHorizontal,
+  RefreshCw, Send, Settings, ShieldCheck, Sparkles, Sun, User, UserCircle, X, Youtube, Zap,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { copyText, openLink } from '../../lib/nativeBridge';
@@ -129,6 +129,7 @@ export default function NativeApp() {
   const [info, setInfo] = useState<Info | null>(null);
   const [loading, setLoading] = useState(false);
   const [acct, setAcct] = useState(false);
+  const [drawer, setDrawer] = useState(false);
   const [updDismissed, setUpdDismissed] = useState(false);
   const [popupDone, setPopupDone] = useState(false);
   const [appVer, setAppVer] = useState('');
@@ -374,19 +375,6 @@ export default function NativeApp() {
         )}
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-2.5">
-        {([
-          ['Setup', <Settings key="1" className="h-5 w-5" />, () => go('setup')],
-          ['Support', <Headphones key="2" className="h-5 w-5" />, () => wa(waBd, `Hello MaheHub Support.${idTxt}`)],
-          ['Account', <User key="3" className="h-5 w-5" />, () => go('account')],
-          ['Reseller', <Briefcase key="4" className="h-5 w-5" />, () => go('reseller')],
-        ] as [string, React.ReactNode, () => void][]).map(([l, ic, fn]) => (
-          <button key={l} onClick={() => { tap(); fn(); }} className="mh-press flex flex-col items-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--card)] py-3.5 text-[11px] font-bold shadow-[var(--shadow)]">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--soft)] text-indigo-500">{ic}</span>{l}
-          </button>
-        ))}
-      </div>
-
       <div className="mb-3 space-y-3">{notices.slice(0, 2).map((n) => (<NoticeCard key={n.id} kind={n.kind} title={n.title} body={n.body} />))}</div>
 
       {(() => {
@@ -563,47 +551,57 @@ export default function NativeApp() {
     </div>
   );
 
-  const MoreTab = (
-    <div className="mh-in">
-      <div className={card}>
-        <div className="mb-3 text-sm font-black">Appearance</div>
-        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-[var(--soft)] p-1 text-sm font-bold">
-          {(['light', 'dark'] as Theme[]).map((t) => (
-            <button key={t} onClick={() => { tap(); changeTheme(t); }} className={`mh-press flex items-center justify-center gap-2 rounded-xl py-3 ${theme === t ? 'bg-[var(--card)] text-indigo-500 shadow' : 'text-[var(--mut)]'}`}>
-              {t === 'light' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}{t === 'light' ? 'Light' : 'Dark'}
-            </button>
+  const MoreTab = (() => {
+    const Row = ({ icon, color, label, sub, onClick }: { icon: React.ReactNode; color: string; label: string; sub?: string; onClick: () => void }) => (
+      <button onClick={() => { tap(); onClick(); }} className="mh-press flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left hover:bg-[var(--soft)]">
+        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${color}`}>{icon}</span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-black">{label}</span>{sub && <span className="block truncate text-xs text-[var(--mut)]">{sub}</span>}</span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-[var(--mut)]" />
+      </button>
+    );
+    return (
+      <div className="mh-in">
+        <div className={`${card} !p-2`}>
+          <div className="px-3 pb-1 pt-3 text-[11px] font-bold uppercase tracking-wider text-[var(--mut)]">Support · real people, Bangla and English</div>
+          <Row icon={<MessageCircle className="h-5 w-5" />} color="bg-emerald-500/15 text-emerald-500" label="WhatsApp Bangladesh" sub={`+${waBd}`} onClick={() => wa(waBd, `Hello MaheHub BD Support.${idTxt}`)} />
+          <Row icon={<MessageCircle className="h-5 w-5" />} color="bg-emerald-500/15 text-emerald-500" label="WhatsApp Malaysia" sub={`+${waMy}`} onClick={() => wa(waMy, `Hello MaheHub Malaysia Support.${idTxt}`)} />
+          <Row icon={<Mail className="h-5 w-5" />} color="bg-indigo-500/15 text-indigo-500" label="B2B / API enquiries" sub={supportEmail} onClick={() => openLink(`mailto:${supportEmail}`)} />
+        </div>
+        <div className={`${card} !p-2`}>
+          <div className="px-3 pb-1 pt-3 text-[11px] font-bold uppercase tracking-wider text-[var(--mut)]">Follow us</div>
+          <Row icon={<Send className="h-5 w-5" />} color="bg-sky-500/15 text-sky-500" label="Telegram" onClick={() => openLink(tgUrl)} />
+          <Row icon={<Facebook className="h-5 w-5" />} color="bg-blue-500/15 text-blue-500" label="Facebook" onClick={() => openLink(fbUrl)} />
+          <Row icon={<Youtube className="h-5 w-5" />} color="bg-rose-500/15 text-rose-500" label="YouTube" onClick={() => openLink(ytUrl)} />
+          <Row icon={<span className="text-sm font-black">♪</span>} color="bg-fuchsia-500/15 text-fuchsia-500" label="TikTok" onClick={() => openLink(ttUrl)} />
+        </div>
+        <div className={card}>
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-wider text-[var(--mut)]">Appearance</div>
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-[var(--soft)] p-1 text-sm font-bold">
+            {(['light', 'dark'] as Theme[]).map((t) => (
+              <button key={t} onClick={() => { tap(); changeTheme(t); }} className={`mh-press flex items-center justify-center gap-2 rounded-xl py-3 ${theme === t ? 'bg-[var(--card)] text-indigo-500 shadow' : 'text-[var(--mut)]'}`}>
+                {t === 'light' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}{t === 'light' ? 'Light' : 'Dark'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className={`${card} !p-2`}>
+          <div className="px-3 pb-1 pt-3 text-[11px] font-bold uppercase tracking-wider text-[var(--mut)]">Legal</div>
+          {LEGAL.map(([t, d], i) => (
+            <div key={t} className="rounded-2xl">
+              <button className="mh-press flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left hover:bg-[var(--soft)]" onClick={() => { tap(); setLegalOpen(legalOpen === i ? -1 : i); }}>
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-500/15 text-slate-500"><FileText className="h-5 w-5" /></span>
+                <span className="flex-1 text-sm font-black">{t}</span>
+                <ChevronDown className={`h-4 w-4 text-[var(--mut)] transition-transform ${legalOpen === i ? 'rotate-180' : ''}`} />
+              </button>
+              {legalOpen === i && <p className="px-4 pb-4 pl-[68px] text-xs text-[var(--mut)]">{d}</p>}
+            </div>
           ))}
         </div>
+        <button className={`${ghost} mb-3`} onClick={() => openLink(SITE)}><Globe className="h-4 w-4" />Open website</button>
+        <p className="pb-2 text-center text-[11px] text-[var(--mut)]">MaheHub · {isIos ? 'iOS' : 'Android'} app</p>
       </div>
-      <div className={card}>
-        <div className="mb-1 text-sm font-black">Support</div>
-        <p className="mb-3 text-xs text-[var(--mut)]">Real people answer in Bangla and English.</p>
-        <div className="space-y-2">
-          <button className={primary} onClick={() => wa(waBd, `Hello MaheHub BD Support.${idTxt}`)}>🇧🇩 WhatsApp Bangladesh +{waBd}</button>
-          <button className={ghost} onClick={() => wa(waMy, `Hello MaheHub Malaysia Support.${idTxt}`)}>🇲🇾 WhatsApp Malaysia +{waMy}</button>
-          <div className="grid grid-cols-2 gap-2">
-            <button className={ghost} onClick={() => openLink(tgUrl)}>Telegram</button>
-            <button className={ghost} onClick={() => openLink(fbUrl)}>Facebook</button>
-            <button className={ghost} onClick={() => openLink(ttUrl)}>TikTok</button>
-            <button className={ghost} onClick={() => openLink(ytUrl)}>YouTube</button>
-          </div>
-          <button className={ghost} onClick={() => openLink(`mailto:${supportEmail}`)}>B2B / API · {supportEmail}</button>
-        </div>
-      </div>
-      <div className={`${card} !p-2`}>
-        {LEGAL.map(([t, d], i) => (
-          <div key={t} className={i ? 'border-t border-[var(--line)]' : ''}>
-            <button className="flex w-full items-center justify-between px-3 py-3.5 text-left text-sm font-bold" onClick={() => { tap(); setLegalOpen(legalOpen === i ? -1 : i); }}>
-              {t}<ChevronDown className={`h-4 w-4 text-[var(--mut)] transition-transform ${legalOpen === i ? 'rotate-180' : ''}`} />
-            </button>
-            {legalOpen === i && <p className="px-3 pb-4 text-xs text-[var(--mut)]">{d}</p>}
-          </div>
-        ))}
-      </div>
-      <button className={`${ghost} mb-3`} onClick={() => openLink(SITE)}><Globe className="h-4 w-4" />Open website</button>
-      <p className="pb-2 text-center text-[11px] text-[var(--mut)]">MaheHub · {isIos ? 'iOS' : 'Android'} app</p>
-    </div>
-  );
+    );
+  })();
 
   const titles: Record<Tab, string> = { home: 'MaheHub', account: 'Account', setup: 'Setup', reseller: 'Reseller', more: 'More', admin: 'Admin' };
 
@@ -611,7 +609,8 @@ export default function NativeApp() {
     <div style={vars} className="relative flex h-[100dvh] flex-col bg-[var(--bg)] text-[var(--ink)]">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <header className="flex items-center justify-between px-5 pb-2" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 10px)' }}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <button aria-label="Menu" className="mh-press -ml-2 rounded-xl p-2 text-[var(--ink)]" onClick={() => { tap(); setDrawer(true); }}><Menu className="h-6 w-6" /></button>
           <img src="/icon-512.png" alt="MaheHub" className="h-10 w-10 rounded-xl" />
           <div>
             <div className="text-lg font-black leading-none">{titles[tab]}</div>
@@ -624,6 +623,41 @@ export default function NativeApp() {
           <button aria-label="Login and logout" className={`mh-press rounded-xl p-2.5 ${logged || staff ? 'text-indigo-500' : 'text-[var(--mut)]'}`} onClick={() => { tap(); setAcct(!acct); }}><UserCircle className="h-6 w-6" /></button>
         </div>
       </header>
+      {drawer && (
+        <>
+          <div className="fixed inset-0 z-[60] bg-black/50" onClick={() => setDrawer(false)} />
+          <aside className="fixed bottom-0 left-0 top-0 z-[70] flex w-[78%] max-w-xs flex-col overflow-y-auto bg-[var(--card)] shadow-2xl" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 14px)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+            <div className="flex items-center justify-between px-5 pb-3">
+              <div className="flex items-center gap-3"><img src="/icon-512.png" alt="" className="h-10 w-10 rounded-xl" /><div><div className="font-black leading-none">MaheHub</div><div className="mt-1 text-[10px] font-bold tracking-[0.2em] text-indigo-500">SMART DNS</div></div></div>
+              <button aria-label="Close menu" className="mh-press rounded-xl p-2 text-[var(--mut)]" onClick={() => setDrawer(false)}><X className="h-5 w-5" /></button>
+            </div>
+            <div className="px-3">
+              {([
+                ['Home', <Home key="1" className="h-5 w-5" />, () => go('home')],
+                ['Account', <User key="2" className="h-5 w-5" />, () => go('account')],
+                ['Setup guide', <Settings key="3" className="h-5 w-5" />, () => go('setup')],
+                ['Reseller panel', <Briefcase key="4" className="h-5 w-5" />, () => go('reseller')],
+                ['More', <MoreHorizontal key="5" className="h-5 w-5" />, () => go('more')],
+              ] as [string, React.ReactNode, () => void][]).map(([l, ic, fn]) => (
+                <button key={l} onClick={() => { setDrawer(false); fn(); }} className="mh-press flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold hover:bg-[var(--soft)]"><span className="text-indigo-500">{ic}</span>{l}</button>
+              ))}
+            </div>
+            <div className="mx-5 my-3 border-t border-[var(--line)]" />
+            <div className="px-3">
+              <div className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-[var(--mut)]">Support</div>
+              <button onClick={() => { setDrawer(false); wa(waBd, `Hello MaheHub Support.${idTxt}`); }} className="mh-press flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold hover:bg-[var(--soft)]"><span className="text-emerald-500"><MessageCircle className="h-5 w-5" /></span>WhatsApp Bangladesh</button>
+              <button onClick={() => { setDrawer(false); wa(waMy, `Hello MaheHub Malaysia Support.${idTxt}`); }} className="mh-press flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold hover:bg-[var(--soft)]"><span className="text-emerald-500"><MessageCircle className="h-5 w-5" /></span>WhatsApp Malaysia</button>
+              <button onClick={() => { setDrawer(false); openLink(tgUrl); }} className="mh-press flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold hover:bg-[var(--soft)]"><span className="text-sky-500"><Send className="h-5 w-5" /></span>Telegram</button>
+            </div>
+            <div className="mx-5 my-3 border-t border-[var(--line)]" />
+            <div className="px-3 pb-4">
+              <button onClick={() => { tap(); changeTheme(theme === 'dark' ? 'light' : 'dark'); }} className="mh-press flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold hover:bg-[var(--soft)]"><span className="text-indigo-500">{theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}</span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
+              <button onClick={() => { setDrawer(false); openLink(SITE); }} className="mh-press flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold hover:bg-[var(--soft)]"><span className="text-indigo-500"><Globe className="h-5 w-5" /></span>Open website</button>
+              {logged && <button onClick={() => { setDrawer(false); logout(); }} className="mh-press flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-rose-500 hover:bg-rose-500/10"><LogOut className="h-5 w-5" />Customer log out</button>}
+            </div>
+          </aside>
+        </>
+      )}
       {acct && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setAcct(false)} />
