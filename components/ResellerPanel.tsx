@@ -967,7 +967,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
       </aside>
 
       <main className="flex-1 min-w-0">
-        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-[var(--line)] bg-[var(--bg)]/90 px-4 sm:px-8 py-3 backdrop-blur">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-[var(--line)] bg-[var(--bg)] px-4 sm:px-8 pb-3" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
           <button className="lg:hidden" onClick={() => setMenu(true)}><Menu className="h-6 w-6" /></button>
           <div className="text-sm text-[var(--mut)] hidden sm:block">MaheHub / {mode === 'vpn' ? 'VPN / ' : 'DNS / '}<span className="font-bold text-[var(--ink)] capitalize">{tab}</span></div>
           <div className="ml-auto flex items-center gap-2">

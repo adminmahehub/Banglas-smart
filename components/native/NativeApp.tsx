@@ -608,7 +608,7 @@ export default function NativeApp() {
   return (
     <div style={vars} className="relative flex h-[100dvh] flex-col bg-[var(--bg)] text-[var(--ink)]">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
-      <header className="flex items-center justify-between px-5 pb-2" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 10px)' }}>
+      <header className={`items-center justify-between px-5 pb-2 ${tab === 'reseller' || tab === 'admin' ? 'hidden' : 'flex'}`} style={{ paddingTop: 'calc(env(safe-area-inset-top) + 10px)' }}>
         <div className="flex items-center gap-2.5">
           <button aria-label="Menu" className="mh-press -ml-2 rounded-xl p-2 text-[var(--ink)]" onClick={() => { tap(); setDrawer(true); }}><Menu className="h-6 w-6" /></button>
           <img src="/icon-512.png" alt="MaheHub" className="h-10 w-10 rounded-xl" />
