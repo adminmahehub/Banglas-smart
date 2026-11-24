@@ -782,7 +782,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const download = async (a: VpnAccount, forceWg = false) => {
     const text = await fetchProfile(a, forceWg);
     if (text === null) return;
-    try { await saveTextFile(`${a.username.slice(0, 15)}.conf`, text); } catch { alert('Could not save the file.'); }
+    try { const m = await saveTextFile(`${a.username.slice(0, 15)}.conf`, text); if (m) alert(m); } catch { alert('Could not save the file.'); }
   };
 
   const Stat = ({ icon: I, label, value, tone }: { icon: any; label: string; value: string | number; tone: string }) => (

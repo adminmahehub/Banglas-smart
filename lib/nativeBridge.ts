@@ -15,18 +15,25 @@ export async function copyText(text: string): Promise<void> {
   try { await navigator.clipboard?.writeText(text); } catch { /* ignore */ }
 }
 
-/** Saves a text file. Website: normal download. App: writes to cache and opens the phone share sheet. */
-export async function saveTextFile(name: string, text: string): Promise<void> {
+/** Saves a text file. Website: normal download. Android app: straight into Downloads (falls back to Save-as, then the share sheet). Returns a short message to show. */
+export async function saveTextFile(name: string, text: string): Promise<string> {
   if (native()) {
+    const { Capacitor, registerPlugin } = await import('@capacitor/core');
+    if (Capacitor.getPlatform() === 'android') {
+      const MaheNative: any = registerPlugin('MaheNative');
+      try { await MaheNative.saveToDownloads({ name, text }); return `Saved in your Downloads folder as ${name}. In WireGuard: + → Import from file or archive → Downloads → ${name}.`; } catch { /* try Save-as */ }
+      try { await MaheNative.saveFile({ name, text }); return `Saved ${name}. In WireGuard: + → Import from file or archive.`; } catch (e: any) { if (/cancel/i.test(String(e?.message || e?.code || ''))) return ''; /* share sheet below */ }
+    }
     const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
     const { Share } = await import('@capacitor/share');
     const f = await Filesystem.writeFile({ path: name, data: text, directory: Directory.Cache, encoding: Encoding.UTF8 });
     await Share.share({ title: name, dialogTitle: name, url: f.uri });
-    return;
+    return '';
   }
   const url = URL.createObjectURL(new Blob([text], { type: 'application/octet-stream' }));
   const a = document.createElement('a');
   a.href = url; a.download = name; a.style.display = 'none';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return '';
 }
