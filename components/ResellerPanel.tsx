@@ -761,10 +761,15 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   }
 
   const fetchProfile = async (a: VpnAccount, forceWg = false): Promise<string | null> => {
+    if (a.status !== 'active') {
+      alert(`${a.username} is ${a.status}. Renew the account first (Renew button), then Copy / Download / QR will work.`);
+      return null;
+    }
     const { data, error } = await supabase.functions.invoke('wg-provision', { body: { username: a.username } });
     if (error || !data) {
       let detail = error?.message || 'the server is not responding';
       try { const ctx = (error as any)?.context; if (ctx?.text) detail = `${ctx.status}: ${await ctx.text()}`; } catch {}
+      if (/not active/i.test(detail)) { alert(`${a.username} has expired. Renew the account first (Renew button), then Copy / Download / QR will work.`); return null; }
       alert('Could not create the profile: ' + detail); return null;
     }
     return data instanceof Blob ? await data.text() : (typeof data === 'string' ? data : JSON.stringify(data));
