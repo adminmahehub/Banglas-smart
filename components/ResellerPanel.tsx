@@ -110,6 +110,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const [ck, setCk] = useState<'dns' | 'vpn'>('dns'); // which balance Add Credit tops up
   const isAdmin = prof?.role === 'admin';
   const [q, setQ] = useState('');
+  const [sf, setSf] = useState<'all' | 'active' | 'expired' | 'suspended'>('all');
   const [dq, setDq] = useState('');
   const [lk, setLk] = useState('');
   const [lkRes, setLkRes] = useState<any>(null);
@@ -333,12 +334,13 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
   const modeAccounts = useMemo(() => accounts.filter((a) => (a.service || 'dns') === mode), [accounts, mode]);
   const list = useMemo(() => {
     const k = q.trim().toLowerCase();
-    if (!k) return modeAccounts;
-    return modeAccounts.filter((a) =>
+    const base = sf === 'all' ? modeAccounts : modeAccounts.filter((a) => a.status === sf);
+    if (!k) return base;
+    return base.filter((a) =>
       a.username.toLowerCase().includes(k)
       || (a.customerCode || '').toLowerCase().includes(k)
       || (isAdmin && (ownerNames[a.ownerId || ''] || '').toLowerCase().includes(k)));
-  }, [modeAccounts, q, isAdmin, ownerNames]);
+  }, [modeAccounts, q, sf, isAdmin, ownerNames]);
   const active = modeAccounts.filter((a) => a.status === 'active').length;
   const switchMode = (m: 'dns' | 'vpn') => { setMode(m); setTab('dashboard'); setMenu(false); setQ(''); setErr(''); setModal(false); };
   useEffect(() => { if (user && isAdmin) supabase.rpc('admin_dashboard_stats', { p_service: mode }).then(({ data }) => setStats(data || null)); }, [mode]);
@@ -1177,6 +1179,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
           {tab === 'users' && (<>
             <Head t={mode === 'vpn' ? 'VPN Users' : 'Users'} s={mode === 'vpn' ? 'WireGuard accounts with bandwidth' : 'Customers by phone number'}><div className="flex gap-2"><button onClick={() => { setAddTab('id'); setModal(true); }} className={primary}><UserPlus className="h-4 w-4" />Add User</button></div></Head>
             <div className="relative mb-4"><Search className="absolute left-3.5 top-3 h-4 w-4 text-[var(--mut)]" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={mode === 'vpn' ? 'Search username…' : (isAdmin ? 'Search phone, customer ID or reseller…' : 'Search phone or customer ID…')} className={`${inp} pl-10`} /></div>
+            <div className="flex gap-2 mb-4 overflow-x-auto">{(['all', 'active', 'expired', 'suspended'] as const).map((f) => { const n = f === 'all' ? modeAccounts.length : modeAccounts.filter((a) => a.status === f).length; return <button key={f} type="button" onClick={() => setSf(f)} className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-black capitalize border ${sf === f ? 'bg-[var(--accent,#2563eb)] text-white border-transparent' : 'border-[var(--line,#ffffff22)] text-[var(--mut)]'}`}>{f} ({n})</button>; })}</div>
             <Reminders />
             <UsersTable rows={list} />
             <div className={`${card} p-5 mt-6 space-y-3`}>
