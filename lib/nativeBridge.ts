@@ -37,3 +37,19 @@ export async function saveTextFile(name: string, text: string): Promise<string> 
   setTimeout(() => URL.revokeObjectURL(url), 10000);
   return '';
 }
+
+/** Share a text file with another app (WhatsApp, Telegram, Drive...). */
+export async function shareTextFile(name: string, text: string): Promise<void> {
+  if (native()) {
+    const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
+    const { Share } = await import('@capacitor/share');
+    const f = await Filesystem.writeFile({ path: name, data: text, directory: Directory.Cache, encoding: Encoding.UTF8 });
+    await Share.share({ title: name, dialogTitle: name, url: f.uri });
+    return;
+  }
+  const file = new File([text], name, { type: 'text/plain' });
+  const nav: any = navigator;
+  if (nav.canShare && nav.canShare({ files: [file] })) { await nav.share({ files: [file], title: name }); return; }
+  if (nav.share) { await nav.share({ title: name, text }); return; }
+  throw new Error('share_unsupported');
+}

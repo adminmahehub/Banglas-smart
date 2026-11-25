@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Network, PlusCircle, Activity, KeyRound, UserCircle, LogOut, Search,
-  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone, ShieldCheck, QrCode, Smartphone, LayoutPanelTop,
+  Menu, X, Copy, Moon, Sun, Home, Trash2, RefreshCw, Ban, Download, UserPlus, Wallet, Server, Check, Link2, MessageCircle, Pencil, Megaphone, ShieldCheck, QrCode, Share2, Smartphone, LayoutPanelTop,
 } from 'lucide-react';
 import NoticeCard from './NoticeCard';
 import SiteEditor from './SiteEditor';
@@ -12,7 +12,7 @@ import { supabase } from '../lib/supabase';
 import { COUNTRIES } from '../lib/countries';
 import QrModal from './QrModal';
 import { siteOrigin } from '../lib/siteOrigin';
-import { openLink, saveTextFile } from '../lib/nativeBridge';
+import { openLink, saveTextFile, shareTextFile } from '../lib/nativeBridge';
 
 type Tab = 'dashboard' | 'users' | 'resellers' | 'credit' | 'site' | 'editor' | 'activity' | 'api' | 'profile';
 const NAV: { id: Tab; label: string; icon: any }[] = [
@@ -785,6 +785,11 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
     try { const m = await saveTextFile(`${a.username.slice(0, 15)}.conf`, text); if (m) alert(m); } catch { alert('Could not save the file.'); }
   };
 
+  const shareConf = async (a: VpnAccount, forceWg = false) => {
+    const text = await fetchProfile(a, forceWg);
+    if (text === null) return;
+    try { await shareTextFile(`${a.username.slice(0, 15)}.conf`, text); } catch (e: any) { if (!/abort|cancel/i.test(String(e?.name || e?.message || ''))) alert('Sharing is not available here. Use Copy or Download instead.'); }
+  };
   const Stat = ({ icon: I, label, value, tone }: { icon: any; label: string; value: string | number; tone: string }) => (
     <div className={`${card} p-5 flex items-center gap-4`}>
       <div className={`h-12 w-12 rounded-2xl flex items-center justify-center text-white ${tone}`}><I className="h-5 w-5" /></div>
@@ -865,6 +870,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
             {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
               <button title="1. Copy WireGuard config" onClick={() => copyConf(a, true)} className={`${ghost} !p-2`}>{copied === 'conf-' + a.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
               <button title="2. Download WireGuard .conf" onClick={() => download(a, true)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
+<button title="Share WireGuard .conf (WhatsApp, Telegram…)" onClick={() => shareConf(a, true)} className={`${ghost} !p-2`}><Share2 className="h-4 w-4" /></button>
               <button title="WireGuard QR code (customer scans it)" onClick={() => showQr(a, true)} className={`${ghost} !p-2`}><QrCode className="h-4 w-4" /></button>
               <button title="3. Copy DNS link (bKash)" onClick={() => makeLink(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
               <button title="4. Edit phone number" onClick={() => { setPhoneFor(a); setNewPhone('+' + a.username); }} className={`${ghost} !p-2`}><Pencil className="h-4 w-4" /></button>
@@ -903,6 +909,7 @@ export default function ResellerPanel({ onLogout, onStorefront, startSignup, adm
               {!compact && <td className="px-4 py-3"><div className="flex gap-1.5">
                 <button title="1. Copy WireGuard config" onClick={() => copyConf(a)} className={`${ghost} !p-2`}>{copied === 'conf-' + a.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
                 <button title="2. Download WireGuard .conf" onClick={() => download(a)} className={`${ghost} !p-2`}><Download className="h-4 w-4" /></button>
+<button title="Share WireGuard .conf (WhatsApp, Telegram…)" onClick={() => shareConf(a)} className={`${ghost} !p-2`}><Share2 className="h-4 w-4" /></button>
                 <button title="WireGuard QR code (customer scans it)" onClick={() => showQr(a)} className={`${ghost} !p-2`}><QrCode className="h-4 w-4" /></button>
                 <button title="Account details" onClick={() => setSlip(a)} className={`${ghost} !p-2`}><Link2 className="h-4 w-4" /></button>
                 <button title="Renew / add bandwidth" onClick={() => { setRenewFor(a); setRenewMonths(1); setRenewGb(0); }} className={`${ghost} !p-2`}><RefreshCw className="h-4 w-4" /></button>

@@ -140,6 +140,12 @@ export function B2BAdminCard({ cls }: { cls: { card: string; primary: string; gh
     const { error } = await supabase.rpc('admin_resolve_b2b', { p_id: id, p_approve: ok, p_note: note });
     if (error) alert(error.message); else load();
   }
+  async function revokeReq(id: string) {
+    if (!confirm('Stop this partner? Their API key is disabled immediately.')) return;
+    const note = prompt('Reason (optional)') || '';
+    const { data, error } = await supabase.rpc('admin_revoke_b2b_request', { p_id: id, p_note: note });
+    if (error) alert(error.message); else { alert(Number(data) > 0 ? 'Access revoked. API key disabled.' : 'Marked revoked. No API key was linked to this WhatsApp number; check the partner list above.'); load(); }
+  }
   const pend = rows.filter((r) => r.status === 'pending');
   if (!rows.length) return null;
   return (
@@ -156,7 +162,7 @@ export function B2BAdminCard({ cls }: { cls: { card: string; primary: string; gh
               <a href={`https://wa.me/${r.whatsapp}`} target="_blank" rel="noreferrer" className={`${cls.ghost} !px-3 !py-1.5 text-xs`}>WhatsApp</a>
               {r.status === 'pending'
                 ? <><button className={`${cls.primary} !px-3 !py-1.5 text-xs`} onClick={() => decide(r.id, true)}>Approve</button><button className={`${cls.ghost} !px-3 !py-1.5 text-xs`} onClick={() => decide(r.id, false)}>Reject</button></>
-                : <span className={`text-xs font-bold ${r.status === 'approved' ? 'text-emerald-500' : 'text-rose-500'}`}>{r.status}</span>}
+                : <><span className={`text-xs font-bold ${r.status === 'approved' ? 'text-emerald-500' : 'text-rose-500'}`}>{r.status}</span>{r.status === 'approved' && <button className={`${cls.ghost} !px-3 !py-1.5 text-xs !text-rose-500`} onClick={() => revokeReq(r.id)}>Revoke access</button>}</>}
             </div>
           </div>
         ))}
